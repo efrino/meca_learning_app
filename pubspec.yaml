@@ -1,0 +1,86 @@
+name: meca_learning_app
+description: Meca Learning Application with Activity Tracking
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Supabase
+  supabase_flutter: ^ 2.12.0
+  
+  # Google APIs (Drive)
+  googleapis: ^15.0.0
+  googleapis_auth: ^2.0.0
+  http: ^1.6.0
+  
+  # State Management
+  flutter_riverpod: ^3.0.3
+  riverpod_annotation: ^3.0.3
+  
+  # Local Storage & Database
+  shared_preferences: ^2.5.4
+  flutter_secure_storage: ^10.0.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  sqflite: ^2.4.2
+  path: ^1.9.1
+  
+  # PDF Viewer
+  syncfusion_flutter_pdfviewer: ^32.1.19
+  flutter_cache_manager: ^3.4.1
+  
+  # Video Player
+  video_player: ^2.10.1
+  chewie: ^1.13.0
+
+  # Push Notifications
+  firebase_core: ^4.3.0
+  firebase_messaging: ^16.1.0
+  flutter_local_notifications: ^19.5.0
+  
+  # UI Components
+  cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
+  flutter_svg: ^2.2.3
+  fl_chart: ^1.1.1
+  google_fonts: ^6.3.3
+  
+  # Utils
+  flutter_dotenv: ^6.0.0
+  intl: ^0.20.2
+  path_provider: ^2.1.5
+  url_launcher: ^6.3.2
+  connectivity_plus: ^7.0.0
+  device_info_plus: ^12.3.0
+  package_info_plus: ^9.0.0
+  uuid: ^4.5.2
+  crypto: ^3.0.7
+  timeago: ^3.7.1
+  
+  # Icons
+  cupertino_icons: ^1.0.6
+  iconsax: ^0.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.10.4
+  riverpod_generator: ^3.0.3
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/.env
+    - assets/images/
+    - assets/icons/
+    - assets/credentials/
+    - assets/sample.pdf
