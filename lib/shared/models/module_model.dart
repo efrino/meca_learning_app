@@ -187,10 +187,69 @@ class ModuleModel {
   }
 
   /// URL thumbnail dari Google Drive
+  /// Mengkonversi berbagai format URL ke format download langsung
   String getThumbnailUrl({int size = 220}) {
-    if (thumbnailGdriveId != null) {
+    // Prioritas 1: Jika ada thumbnailGdriveId, gunakan format thumbnail
+    if (thumbnailGdriveId != null && thumbnailGdriveId!.isNotEmpty) {
       return 'https://drive.google.com/thumbnail?id=$thumbnailGdriveId&sz=s$size';
     }
-    return thumbnailUrl ?? '';
+
+    // Prioritas 2: Jika thumbnailUrl adalah Google Drive link, extract ID dan konversi
+    if (thumbnailUrl != null && thumbnailUrl!.isNotEmpty) {
+      // Cek apakah URL adalah Google Drive link
+      if (thumbnailUrl!.contains('drive.google.com')) {
+        // Extract file ID dari berbagai format URL Google Drive
+        String? fileId;
+
+        // Format: /d/{fileId}/
+        final dMatch = RegExp(r'/d/([a-zA-Z0-9_-]+)').firstMatch(thumbnailUrl!);
+        if (dMatch != null) {
+          fileId = dMatch.group(1);
+        }
+
+        // Format: id={fileId}
+        if (fileId == null) {
+          final idMatch =
+              RegExp(r'id=([a-zA-Z0-9_-]+)').firstMatch(thumbnailUrl!);
+          if (idMatch != null) {
+            fileId = idMatch.group(1);
+          }
+        }
+
+        if (fileId != null) {
+          return 'https://drive.google.com/thumbnail?id=$fileId&sz=s$size';
+        }
+      }
+
+      // Jika bukan Google Drive URL, kembalikan apa adanya
+      return thumbnailUrl!;
+    }
+
+    return '';
+  }
+
+  /// Get Google Drive file ID from thumbnail URL or thumbnailGdriveId
+  String? get thumbnailFileId {
+    // Prioritas 1: thumbnailGdriveId langsung
+    if (thumbnailGdriveId != null && thumbnailGdriveId!.isNotEmpty) {
+      return thumbnailGdriveId;
+    }
+
+    // Prioritas 2: Extract dari thumbnailUrl
+    if (thumbnailUrl != null && thumbnailUrl!.contains('drive.google.com')) {
+      // Format: /d/{fileId}/
+      final dMatch = RegExp(r'/d/([a-zA-Z0-9_-]+)').firstMatch(thumbnailUrl!);
+      if (dMatch != null) {
+        return dMatch.group(1);
+      }
+
+      // Format: id={fileId}
+      final idMatch = RegExp(r'id=([a-zA-Z0-9_-]+)').firstMatch(thumbnailUrl!);
+      if (idMatch != null) {
+        return idMatch.group(1);
+      }
+    }
+
+    return null;
   }
 }

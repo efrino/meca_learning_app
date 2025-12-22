@@ -21,14 +21,6 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   final _activityLogService = ActivityLogService();
 
-  final List<Widget> _screens = [
-    const _HomeContent(),
-    const ModulesScreen(embedded: true),
-    const AnimationsScreen(embedded: true),
-    const MecaAidScreen(embedded: true),
-    const ErrorCodesScreen(embedded: true),
-  ];
-
   final List<String> _screenNames = [
     'home',
     'modules',
@@ -58,35 +50,47 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Build screens list with callback for _HomeContent
+    final List<Widget> screens = [
+      _HomeContent(onNavigateToTab: _onTabChanged),
+      const ModulesScreen(embedded: true),
+      const AnimationsScreen(embedded: true),
+      const MecaAidScreen(embedded: true),
+      const ErrorCodesScreen(embedded: true),
+    ];
+
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: screens,
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(0, Iconsax.home, 'Beranda'),
-                _buildNavItem(1, Iconsax.book, 'Modul'),
-                _buildNavItem(2, Iconsax.play_circle, 'Animasi'),
-                _buildNavItem(3, Iconsax.task_square, 'Meca Aid'),
-                _buildNavItem(4, Iconsax.warning_2, 'Error'),
-              ],
-            ),
+      bottomNavigationBar: _buildBottomNavBar(),
+    );
+  }
+
+  Widget _buildBottomNavBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, -5),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: SizedBox(
+          height: 60, // Fixed height untuk konsistensi
+          child: Row(
+            children: [
+              _buildNavItem(0, Iconsax.home, 'Beranda'),
+              _buildNavItem(1, Iconsax.book, 'Modul'),
+              _buildNavItem(2, Iconsax.play_circle, 'Animasi'),
+              _buildNavItem(3, Iconsax.task_square, 'Meca Aid'),
+              _buildNavItem(4, Iconsax.warning_2, 'Error'),
+            ],
           ),
         ),
       ),
@@ -95,33 +99,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = _currentIndex == index;
-    return InkWell(
-      onTap: () => _onTabChanged(index),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryColor.withOpacity(0.1) : null,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? AppTheme.primaryColor : AppTheme.textLight,
-              size: 24,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+    return Expanded(
+      // Expanded untuk ukuran seragam (dibagi rata)
+      child: InkWell(
+        onTap: () => _onTabChanged(index),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.primaryColor.withOpacity(0.1) : null,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
                 color: isSelected ? AppTheme.primaryColor : AppTheme.textLight,
+                size: 22,
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                  color:
+                      isSelected ? AppTheme.primaryColor : AppTheme.textLight,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis, // Ellipsis jika kepanjangan
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -129,7 +138,9 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _HomeContent extends StatelessWidget {
-  const _HomeContent();
+  final Function(int) onNavigateToTab;
+
+  const _HomeContent({required this.onNavigateToTab});
 
   @override
   Widget build(BuildContext context) {
@@ -299,34 +310,36 @@ class _HomeContent extends StatelessWidget {
             crossAxisCount: 2,
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
-            childAspectRatio: 1.3,
+            childAspectRatio: 1.1, // Lebih tinggi untuk menampung konten
             children: [
               _QuickActionCard(
-                  icon: Iconsax.book_1,
-                  title: 'Modul',
-                  subtitle: 'Materi pembelajaran',
-                  color: AppTheme.moduleColor,
-                  onTap: () => Navigator.pushNamed(context, AppRoutes.modules)),
+                icon: Iconsax.book_1,
+                title: 'Modul',
+                subtitle: 'Materi pembelajaran',
+                color: AppTheme.moduleColor,
+                onTap: () => onNavigateToTab(1), // Navigate via tab, bukan push
+              ),
               _QuickActionCard(
-                  icon: Iconsax.play_circle,
-                  title: 'Animasi',
-                  subtitle: 'Video pembelajaran',
-                  color: AppTheme.animationColor,
-                  onTap: () =>
-                      Navigator.pushNamed(context, AppRoutes.animations)),
+                icon: Iconsax.play_circle,
+                title: 'Animasi',
+                subtitle: 'Video pembelajaran',
+                color: AppTheme.animationColor,
+                onTap: () => onNavigateToTab(2), // Navigate via tab
+              ),
               _QuickActionCard(
-                  icon: Iconsax.task_square,
-                  title: 'Meca Aid',
-                  subtitle: 'Latihan soal',
-                  color: AppTheme.mecaAidColor,
-                  onTap: () => Navigator.pushNamed(context, AppRoutes.mecaAid)),
+                icon: Iconsax.task_square,
+                title: 'Meca Aid',
+                subtitle: 'Latihan soal',
+                color: AppTheme.mecaAidColor,
+                onTap: () => onNavigateToTab(3), // Navigate via tab
+              ),
               _QuickActionCard(
-                  icon: Iconsax.warning_2,
-                  title: 'Error Code',
-                  subtitle: 'Panduan troubleshoot',
-                  color: AppTheme.errorCodeColor,
-                  onTap: () =>
-                      Navigator.pushNamed(context, AppRoutes.errorCodes)),
+                icon: Iconsax.warning_2,
+                title: 'Error Code',
+                subtitle: 'Panduan troubleshoot',
+                color: AppTheme.errorCodeColor,
+                onTap: () => onNavigateToTab(4), // Navigate via tab
+              ),
             ],
           ),
         ],
@@ -411,42 +424,49 @@ class _QuickActionCard extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _QuickActionCard(
-      {required this.icon,
-      required this.title,
-      required this.subtitle,
-      required this.color,
-      required this.onTap});
+  const _QuickActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             boxShadow: AppTheme.cardShadow),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                   color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12)),
-              child: Icon(icon, color: color, size: 24),
+                  borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: color, size: 22),
             ),
-            const SizedBox(height: 12),
-            Text(title,
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const Spacer(),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             const SizedBox(height: 2),
-            Text(subtitle,
-                style: const TextStyle(
-                    fontSize: 12, color: AppTheme.textSecondary)),
+            Text(
+              subtitle,
+              style:
+                  const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
@@ -466,24 +486,31 @@ class _ProfileBottomSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                  color: AppTheme.dividerColor,
-                  borderRadius: BorderRadius.circular(2))),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppTheme.dividerColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
           const SizedBox(height: 24),
           Container(
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-                gradient: AppTheme.primaryGradient,
-                borderRadius: BorderRadius.circular(20)),
+              gradient: AppTheme.primaryGradient,
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Center(
-                child: Text(user?.initials ?? 'U',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold))),
+              child: Text(
+                user?.initials ?? 'U',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           Text(user?.fullName ?? 'User',
@@ -494,40 +521,54 @@ class _ProfileBottomSheet extends StatelessWidget {
           if (user?.department != null) ...[
             const SizedBox(height: 4),
             Text(user!.department!,
-                style: const TextStyle(color: AppTheme.textSecondary))
+                style: const TextStyle(color: AppTheme.textSecondary)),
           ],
           const SizedBox(height: 24),
-          _buildMenuItem(context,
-              icon: Iconsax.activity, title: 'Aktivitas Saya', onTap: () {
-            Navigator.pop(context);
-            Navigator.pushNamed(context, AppRoutes.activityLog);
-          }),
-          if (user?.isAdmin ?? false)
-            _buildMenuItem(context,
-                icon: Iconsax.setting_2, title: 'Admin Panel', onTap: () {
+          _buildMenuItem(
+            context,
+            icon: Iconsax.activity,
+            title: 'Aktivitas Saya',
+            onTap: () {
               Navigator.pop(context);
-              Navigator.pushNamed(context, AppRoutes.adminDashboard);
-            }),
-          _buildMenuItem(context,
-              icon: Iconsax.logout,
-              title: 'Keluar',
-              isDestructive: true, onTap: () async {
-            Navigator.pop(context);
-            await AuthService().logout();
-            if (context.mounted)
-              Navigator.pushReplacementNamed(context, AppRoutes.login);
-          }),
+              Navigator.pushNamed(context, AppRoutes.activityLog);
+            },
+          ),
+          if (user?.isAdmin ?? false)
+            _buildMenuItem(
+              context,
+              icon: Iconsax.setting_2,
+              title: 'Admin Panel',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, AppRoutes.adminDashboard);
+              },
+            ),
+          _buildMenuItem(
+            context,
+            icon: Iconsax.logout,
+            title: 'Keluar',
+            isDestructive: true,
+            onTap: () async {
+              Navigator.pop(context);
+              await AuthService().logout();
+              if (context.mounted) {
+                Navigator.pushReplacementNamed(context, AppRoutes.login);
+              }
+            },
+          ),
           const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  Widget _buildMenuItem(BuildContext context,
-      {required IconData icon,
-      required String title,
-      required VoidCallback onTap,
-      bool isDestructive = false}) {
+  Widget _buildMenuItem(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
     return ListTile(
       leading: Icon(icon,
           color: isDestructive ? AppTheme.errorColor : AppTheme.textPrimary),

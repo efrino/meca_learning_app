@@ -74,6 +74,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   build_runner: ^2.10.4
   riverpod_generator: ^3.0.3
+  flutter_launcher_icons: ^0.14.4
 
 flutter:
   uses-material-design: true
@@ -84,3 +85,14 @@ flutter:
     - assets/icons/
     - assets/credentials/
     - assets/sample.pdf
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+
+  image_path_android: "assets/images/Plant ASTO.png"
+  adaptive_icon_foreground: "assets/images/Plant ASTO.png"
+  adaptive_icon_background: "#00000000" # transparan
+
+  image_path_ios: "assets/images/Plant ASTO.png"
+  remove_alpha_ios: true
