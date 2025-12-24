@@ -23,6 +23,9 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
   bool _isLoading = true;
   String? _error;
 
+  // Video cache status tracking
+  Map<String, bool> _videoCacheStatus = {};
+
   @override
   void initState() {
     super.initState();
@@ -40,12 +43,36 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
         _animations = data.map((e) => ModuleModel.fromJson(e)).toList();
         _isLoading = false;
       });
+
+      // Check video cache status after loading animations
+      _checkVideoCacheStatus();
     } catch (e) {
       setState(() {
         _error = 'Gagal memuat animasi: $e';
         _isLoading = false;
       });
     }
+  }
+
+  /// Check cache status for all videos (non-blocking)
+  Future<void> _checkVideoCacheStatus() async {
+    final Map<String, bool> newStatus = {};
+
+    for (final animation in _animations) {
+      final isCached = await VideoCacheService.isVideoCached(animation.id);
+      newStatus[animation.id] = isCached;
+    }
+
+    if (mounted) {
+      setState(() {
+        _videoCacheStatus = newStatus;
+      });
+    }
+  }
+
+  /// Get count of cached videos
+  int get _cachedVideoCount {
+    return _videoCacheStatus.values.where((cached) => cached).length;
   }
 
   @override
@@ -87,9 +114,37 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
               children: [
                 Text('Animasi Pembelajaran',
                     style: Theme.of(context).textTheme.titleLarge),
-                Text('${_animations.length} video tersedia',
-                    style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 13)),
+                // Updated subtitle with cache info
+                Row(
+                  children: [
+                    Text(
+                      '${_animations.length} video',
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 13),
+                    ),
+                    if (_cachedVideoCount > 0) ...[
+                      const Text(
+                        ' • ',
+                        style: TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 13),
+                      ),
+                      Icon(
+                        Icons.offline_pin,
+                        size: 14,
+                        color: Colors.green.shade600,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$_cachedVideoCount tersimpan',
+                        style: TextStyle(
+                          color: Colors.green.shade600,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
@@ -119,8 +174,13 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
         itemCount: _animations.length,
         itemBuilder: (context, index) {
           final animation = _animations[index];
+          final isCached = _videoCacheStatus[animation.id] ?? false;
+
           return _AnimationCard(
-              animation: animation, onTap: () => _openAnimation(animation));
+            animation: animation,
+            isCached: isCached,
+            onTap: () => _openAnimation(animation),
+          );
         },
       ),
     );
@@ -130,15 +190,28 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
     ActivityLogService().logButtonClick(
         buttonId: 'open_animation_${animation.id}',
         screenName: 'animations_screen');
-    Navigator.pushNamed(context, AppRoutes.animationPlayer,
-        arguments: animation);
+
+    Navigator.pushNamed(
+      context,
+      AppRoutes.animationPlayer,
+      arguments: animation,
+    ).then((_) {
+      // Refresh cache status when returning from player
+      _checkVideoCacheStatus();
+    });
   }
 }
 
 class _AnimationCard extends StatelessWidget {
   final ModuleModel animation;
+  final bool isCached;
   final VoidCallback onTap;
-  const _AnimationCard({required this.animation, required this.onTap});
+
+  const _AnimationCard({
+    required this.animation,
+    required this.isCached,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -156,8 +229,11 @@ class _AnimationCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Thumbnail with play button overlay
-              _CachedThumbnailWidget(animation: animation),
+              // Thumbnail with play button overlay and cache badge
+              _CachedThumbnailWidget(
+                animation: animation,
+                isCached: isCached,
+              ),
 
               // Content
               Padding(
@@ -196,6 +272,34 @@ class _AnimationCard extends StatelessWidget {
                               style: const TextStyle(
                                   fontSize: 12, color: AppTheme.textLight))
                         ],
+                        const Spacer(),
+                        // Offline badge in card info
+                        if (isCached)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.offline_pin,
+                                    size: 12, color: Colors.green.shade600),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Offline',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ],
@@ -212,7 +316,12 @@ class _AnimationCard extends StatelessWidget {
 /// Widget untuk menampilkan thumbnail dengan caching ke internal storage
 class _CachedThumbnailWidget extends StatefulWidget {
   final ModuleModel animation;
-  const _CachedThumbnailWidget({required this.animation});
+  final bool isCached;
+
+  const _CachedThumbnailWidget({
+    required this.animation,
+    required this.isCached,
+  });
 
   @override
   State<_CachedThumbnailWidget> createState() => _CachedThumbnailWidgetState();
@@ -330,22 +439,59 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
             // Duration badge (jika ada)
             if (widget.animation.durationMinutes != null) _buildDurationBadge(),
 
-            // Cache indicator (optional, untuk debug)
-            if (_cachedFile != null && !_isLoading)
+            // Video cache indicator (top-left) - shows if video is cached
+            if (widget.isCached)
               Positioned(
                 left: 8,
                 top: 8,
                 child: Container(
                   padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade600,
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.offline_pin, size: 12, color: Colors.white),
+                      SizedBox(width: 4),
+                      Text(
+                        'Tersimpan',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // Thumbnail cache indicator (top-right) - shows if thumbnail is cached
+            if (_cachedFile != null && !_isLoading)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.8),
+                    color: Colors.blue.withOpacity(0.8),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.offline_pin, size: 10, color: Colors.white),
+                      Icon(Icons.image, size: 10, color: Colors.white),
                       SizedBox(width: 2),
                       Text(
                         'Cached',
@@ -474,6 +620,115 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
         ),
       ),
     );
+  }
+}
+
+/// Service untuk mengelola cache video
+class VideoCacheService {
+  /// Check if video is cached
+  static Future<bool> isVideoCached(String moduleId) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final videoFile =
+          File('${appDir.path}/video_cache/animation_$moduleId.mp4');
+
+      if (await videoFile.exists()) {
+        // Validate file size (minimum 100KB)
+        final fileSize = await videoFile.length();
+        return fileSize > 100 * 1024;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error checking video cache: $e');
+      return false;
+    }
+  }
+
+  /// Get cached video count
+  static Future<int> getCachedVideoCount() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final cacheDir = Directory('${appDir.path}/video_cache');
+
+      if (await cacheDir.exists()) {
+        int count = 0;
+        await for (final entity in cacheDir.list()) {
+          if (entity is File && entity.path.endsWith('.mp4')) {
+            final fileSize = await entity.length();
+            if (fileSize > 100 * 1024) {
+              count++;
+            }
+          }
+        }
+        return count;
+      }
+      return 0;
+    } catch (e) {
+      debugPrint('Error counting cached videos: $e');
+      return 0;
+    }
+  }
+
+  /// Clear all cached videos
+  static Future<void> clearCache() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final cacheDir = Directory('${appDir.path}/video_cache');
+      if (await cacheDir.exists()) {
+        await cacheDir.delete(recursive: true);
+        debugPrint('🗑️ Video cache cleared');
+      }
+    } catch (e) {
+      debugPrint('Error clearing video cache: $e');
+    }
+  }
+
+  /// Get total cache size
+  static Future<int> getCacheSize() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final cacheDir = Directory('${appDir.path}/video_cache');
+
+      if (await cacheDir.exists()) {
+        int totalSize = 0;
+        await for (final entity in cacheDir.list(recursive: true)) {
+          if (entity is File) {
+            totalSize += await entity.length();
+          }
+        }
+        return totalSize;
+      }
+      return 0;
+    } catch (e) {
+      debugPrint('Error getting cache size: $e');
+      return 0;
+    }
+  }
+
+  /// Get formatted cache size
+  static Future<String> getFormattedCacheSize() async {
+    final size = await getCacheSize();
+    if (size < 1024) return '$size B';
+    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
+    if (size < 1024 * 1024 * 1024) {
+      return '${(size / 1024 / 1024).toStringAsFixed(2)} MB';
+    }
+    return '${(size / 1024 / 1024 / 1024).toStringAsFixed(2)} GB';
+  }
+
+  /// Delete specific video
+  static Future<void> deleteVideo(String moduleId) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final videoFile =
+          File('${appDir.path}/video_cache/animation_$moduleId.mp4');
+      if (await videoFile.exists()) {
+        await videoFile.delete();
+        debugPrint('🗑️ Video deleted: animation_$moduleId.mp4');
+      }
+    } catch (e) {
+      debugPrint('Error deleting video: $e');
+    }
   }
 }
 
