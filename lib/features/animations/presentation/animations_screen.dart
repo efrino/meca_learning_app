@@ -20,8 +20,13 @@ class AnimationsScreen extends StatefulWidget {
 
 class _AnimationsScreenState extends State<AnimationsScreen> {
   List<ModuleModel> _animations = [];
+  List<ModuleModel> _filteredAnimations = [];
   bool _isLoading = true;
   String? _error;
+
+  // Search
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   // Video cache status tracking
   Map<String, bool> _videoCacheStatus = {};
@@ -30,6 +35,40 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
   void initState() {
     super.initState();
     _loadAnimations();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    setState(() {
+      _searchQuery = query;
+      _applySearch();
+    });
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      _filteredAnimations = List.from(_animations);
+    });
+  }
+
+  void _applySearch() {
+    if (_searchQuery.isEmpty) {
+      _filteredAnimations = List.from(_animations);
+    } else {
+      final query = _searchQuery.toLowerCase().trim();
+      _filteredAnimations = _animations.where((animation) {
+        final title = animation.title.toLowerCase();
+        final description = (animation.description ?? '').toLowerCase();
+        return title.contains(query) || description.contains(query);
+      }).toList();
+    }
   }
 
   Future<void> _loadAnimations() async {
@@ -41,6 +80,7 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
       final data = await SupabaseService.getModules(category: 'animation');
       setState(() {
         _animations = data.map((e) => ModuleModel.fromJson(e)).toList();
+        _applySearch();
         _isLoading = false;
       });
 
@@ -79,18 +119,30 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: widget.embedded
-          ? null
-          : AppBar(title: const Text('Animasi Pembelajaran')),
+      appBar: widget.embedded ? null : _buildAppBar(),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (widget.embedded) _buildHeader(),
+            _buildSearchBar(),
             Expanded(child: _buildContent()),
           ],
         ),
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: const Text('Animasi Pembelajaran'),
+      actions: [
+        IconButton(
+          icon: const Icon(Iconsax.refresh),
+          onPressed: _loadAnimations,
+          tooltip: 'Refresh',
+        ),
+      ],
     );
   }
 
@@ -114,15 +166,17 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
               children: [
                 Text('Animasi Pembelajaran',
                     style: Theme.of(context).textTheme.titleLarge),
-                // Updated subtitle with cache info
+                // Updated subtitle with cache info and search result
                 Row(
                   children: [
                     Text(
-                      '${_animations.length} video',
+                      _searchQuery.isEmpty
+                          ? '${_animations.length} video'
+                          : '${_filteredAnimations.length} dari ${_animations.length} video',
                       style: const TextStyle(
                           color: AppTheme.textSecondary, fontSize: 13),
                     ),
-                    if (_cachedVideoCount > 0) ...[
+                    if (_cachedVideoCount > 0 && _searchQuery.isEmpty) ...[
                       const Text(
                         ' • ',
                         style: TextStyle(
@@ -155,6 +209,51 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
     );
   }
 
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: TextField(
+          controller: _searchController,
+          onChanged: _onSearchChanged,
+          decoration: InputDecoration(
+            hintText: 'Cari animasi...',
+            hintStyle: const TextStyle(
+              color: AppTheme.textLight,
+              fontSize: 14,
+            ),
+            prefixIcon: const Icon(Iconsax.search_normal,
+                size: 20, color: AppTheme.textLight),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Iconsax.close_circle,
+                        size: 20, color: AppTheme.textLight),
+                    onPressed: _clearSearch,
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildContent() {
     if (_isLoading) return const ShimmerList();
     if (_error != null) {
@@ -166,14 +265,23 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
           title: 'Belum Ada Animasi',
           subtitle: 'Video animasi akan muncul di sini');
     }
+    if (_filteredAnimations.isEmpty) {
+      return EmptyStateWidget(
+        icon: Iconsax.search_status,
+        title: 'Tidak Ditemukan',
+        subtitle: 'Tidak ada animasi yang cocok dengan "$_searchQuery"',
+        buttonText: 'Reset Pencarian',
+        onButtonPressed: _clearSearch,
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _loadAnimations,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _animations.length,
+        itemCount: _filteredAnimations.length,
         itemBuilder: (context, index) {
-          final animation = _animations[index];
+          final animation = _filteredAnimations[index];
           final isCached = _videoCacheStatus[animation.id] ?? false;
 
           return _AnimationCard(
@@ -330,7 +438,6 @@ class _CachedThumbnailWidget extends StatefulWidget {
 class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
   File? _cachedFile;
   bool _isLoading = true;
-  bool _hasError = false;
 
   @override
   void initState() {
@@ -359,7 +466,6 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
 
       // Check if cached file exists
       if (await cachedFile.exists()) {
-        debugPrint('📁 Thumbnail loaded from cache: ${widget.animation.title}');
         if (mounted) {
           setState(() {
             _cachedFile = cachedFile;
@@ -373,17 +479,11 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
       final thumbnailUrl = widget.animation.getThumbnailUrl(size: 400);
 
       if (thumbnailUrl.isEmpty) {
-        debugPrint('⚠️ No thumbnail URL for: ${widget.animation.title}');
         if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _hasError = true;
-          });
+          setState(() => _isLoading = false);
         }
         return;
       }
-
-      debugPrint('⬇️ Downloading thumbnail: $thumbnailUrl');
 
       // Download thumbnail
       final response = await http.get(Uri.parse(thumbnailUrl));
@@ -394,8 +494,6 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
         if (contentType.contains('image') || response.bodyBytes.length > 1000) {
           // Save to cache
           await cachedFile.writeAsBytes(response.bodyBytes);
-
-          debugPrint('✅ Thumbnail cached: ${widget.animation.title}');
 
           if (mounted) {
             setState(() {
@@ -410,12 +508,9 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
         throw Exception('HTTP ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('❌ Thumbnail error for ${widget.animation.title}: $e');
+      debugPrint('Thumbnail error: $e');
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -475,36 +570,6 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
                   ),
                 ),
               ),
-
-            // Thumbnail cache indicator (top-right) - shows if thumbnail is cached
-            if (_cachedFile != null && !_isLoading)
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.image, size: 10, color: Colors.white),
-                      SizedBox(width: 2),
-                      Text(
-                        'Cached',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -514,72 +579,58 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
   Widget _buildThumbnailImage() {
     // Loading state
     if (_isLoading) {
-      return _buildLoadingPlaceholder();
-    }
-
-    // Error or no URL - show default
-    if (_hasError || _cachedFile == null) {
-      return _buildDefaultThumbnail();
+      return Container(
+        color: AppTheme.animationColor.withOpacity(0.1),
+        child: const Center(
+          child: SizedBox(
+            width: 30,
+            height: 30,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(AppTheme.animationColor),
+            ),
+          ),
+        ),
+      );
     }
 
     // Load from cached file
-    return Image.file(
-      _cachedFile!,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        debugPrint('❌ Error loading cached file: $error');
-        return _buildDefaultThumbnail();
-      },
-    );
-  }
+    if (_cachedFile != null) {
+      return Image.file(
+        _cachedFile!,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildDefaultThumbnail(),
+      );
+    }
 
-  Widget _buildLoadingPlaceholder() {
-    return Container(
-      color: AppTheme.animationColor.withOpacity(0.1),
-      child: const Center(
-        child: SizedBox(
-          width: 30,
-          height: 30,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.animationColor),
-          ),
-        ),
-      ),
-    );
+    // Error or no URL - show default
+    return _buildDefaultThumbnail();
   }
 
   Widget _buildDefaultThumbnail() {
-    // Coba load dari asset, jika gagal tampilkan placeholder sederhana
-    return Image.asset(
-      'assets/images/thumbnail_default.jpg',
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        // Jika asset juga tidak ada, tampilkan placeholder warna
-        return Container(
-          color: AppTheme.animationColor.withOpacity(0.15),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Iconsax.video,
-                  size: 48,
-                  color: AppTheme.animationColor.withOpacity(0.5),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Video',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.animationColor.withOpacity(0.7),
-                  ),
-                ),
-              ],
+    return Container(
+      color: AppTheme.animationColor.withOpacity(0.15),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Iconsax.video,
+              size: 48,
+              color: AppTheme.animationColor.withOpacity(0.5),
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 8),
+            Text(
+              'Video',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.animationColor.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

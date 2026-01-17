@@ -1,11 +1,22 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import 'package:flutter/foundation.dart'; // untuk debugPrint
 import '../../config/constants.dart';
 import '../../shared/models/user_model.dart';
 
 class SupabaseService {
   static SupabaseClient get client => Supabase.instance.client;
+
+  // ==================== CURRENT USER ID ====================
+  static String? _currentUserId;
+
+  static String? get currentUserId => _currentUserId;
+
+  /// Set current user ID (panggil setelah login)
+  static void setCurrentUserId(String? userId) {
+    _currentUserId = userId;
+  }
 
   // Initialize Supabase
   static Future<void> initialize() async {
@@ -58,6 +69,9 @@ class SupabaseService {
               .update({'last_login_at': DateTime.now().toIso8601String()}).eq(
                   'id', plainResponse['id']);
 
+          // Set current user ID
+          setCurrentUserId(plainResponse['id']);
+
           return UserModel.fromJson(plainResponse);
         }
         return null;
@@ -69,11 +83,19 @@ class SupabaseService {
           .update({'last_login_at': DateTime.now().toIso8601String()}).eq(
               'id', response['id']);
 
+      // Set current user ID
+      setCurrentUserId(response['id']);
+
       return UserModel.fromJson(response);
     } catch (e) {
-      print('Login error: $e');
+      debugPrint('Login error: $e');
       return null;
     }
+  }
+
+  // Logout - clear current user
+  static void logout() {
+    setCurrentUserId(null);
   }
 
   // Get user by ID
@@ -85,7 +107,7 @@ class SupabaseService {
       if (response == null) return null;
       return UserModel.fromJson(response);
     } catch (e) {
-      print('Get user error: $e');
+      debugPrint('Get user error: $e');
       return null;
     }
   }
@@ -110,7 +132,7 @@ class SupabaseService {
       final response = await query.order('order_index');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('Get modules error: $e');
+      debugPrint('Get modules error: $e');
       return [];
     }
   }
@@ -121,7 +143,7 @@ class SupabaseService {
           await client.from('modules').select().eq('id', id).maybeSingle();
       return response;
     } catch (e) {
-      print('Get module error: $e');
+      debugPrint('Get module error: $e');
       return null;
     }
   }
@@ -131,7 +153,7 @@ class SupabaseService {
       await client.from('modules').insert(data);
       return true;
     } catch (e) {
-      print('Create module error: $e');
+      debugPrint('Create module error: $e');
       return false;
     }
   }
@@ -141,7 +163,7 @@ class SupabaseService {
       await client.from('modules').update(data).eq('id', id);
       return true;
     } catch (e) {
-      print('Update module error: $e');
+      debugPrint('Update module error: $e');
       return false;
     }
   }
@@ -151,8 +173,26 @@ class SupabaseService {
       await client.from('modules').delete().eq('id', id);
       return true;
     } catch (e) {
-      print('Delete module error: $e');
+      debugPrint('Delete module error: $e');
       return false;
+    }
+  }
+
+  /// Mengambil modules berdasarkan parent_folder_id (gdrive_folder_id)
+  static Future<List<Map<String, dynamic>>> getModulesByFolder(
+      String folderId) async {
+    try {
+      final response = await client
+          .from('modules')
+          .select()
+          .eq('parent_folder_id', folderId)
+          .eq('is_active', true)
+          .order('order_index', ascending: true)
+          .order('title', ascending: true);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error getModulesByFolder: $e');
+      rethrow;
     }
   }
 
@@ -184,7 +224,7 @@ class SupabaseService {
       final response = await query.order('code');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('Get error codes error: $e');
+      debugPrint('Get error codes error: $e');
       return [];
     }
   }
@@ -197,7 +237,7 @@ class SupabaseService {
           ''').eq('id', id).maybeSingle();
       return response;
     } catch (e) {
-      print('Get error code error: $e');
+      debugPrint('Get error code error: $e');
       return null;
     }
   }
@@ -216,7 +256,7 @@ class SupabaseService {
           .order('code');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('Search error codes error: $e');
+      debugPrint('Search error codes error: $e');
       return [];
     }
   }
@@ -226,7 +266,7 @@ class SupabaseService {
       await client.from('error_codes').insert(data);
       return true;
     } catch (e) {
-      print('Create error code error: $e');
+      debugPrint('Create error code error: $e');
       return false;
     }
   }
@@ -237,13 +277,14 @@ class SupabaseService {
       await client.from('error_codes').update(data).eq('id', id);
       return true;
     } catch (e) {
-      print('Update error code error: $e');
+      debugPrint('Update error code error: $e');
       return false;
     }
   }
 
   // ==================== QUESTIONS ====================
 
+  /// Mengambil soal-soal berdasarkan module_id
   static Future<List<Map<String, dynamic>>> getQuestionsByModuleId(
     String moduleId,
   ) async {
@@ -254,20 +295,86 @@ class SupabaseService {
           .eq('module_id', moduleId)
           .eq('is_active', true)
           .order('order_index');
-      return List<Map<String, dynamic>>.from(response);
+
+      // Safely convert response to List<Map<String, dynamic>>
+      return response.map((item) {
+        return item;
+      }).toList();
+    
     } catch (e) {
-      print('Get questions error: $e');
+      debugPrint('Get questions error: $e');
       return [];
     }
   }
 
+  /// Mengambil soal-soal berdasarkan quiz_id
+  static Future<List<Map<String, dynamic>>> getQuestionsByQuizId(
+      String quizId) async {
+    try {
+      final response = await client
+          .from('questions')
+          .select()
+          .eq('quiz_id', quizId)
+          .eq('is_active', true)
+          .order('order_index', ascending: true);
+
+      // Safely convert response to List<Map<String, dynamic>>
+      return response.map((item) {
+        return item;
+      }).toList();
+    
+    } catch (e) {
+      debugPrint('Error getQuestionsByQuizId: $e');
+      rethrow;
+    }
+  }
+
+  /// Membuat soal baru (simple)
   static Future<bool> createQuestion(Map<String, dynamic> data) async {
     try {
       await client.from('questions').insert(data);
       return true;
     } catch (e) {
-      print('Create question error: $e');
+      debugPrint('Create question error: $e');
       return false;
+    }
+  }
+
+  /// Membuat soal baru dengan parameter lengkap (untuk Admin)
+  static Future<Map<String, dynamic>> createQuestionWithDetails({
+    required String quizId,
+    required String questionText,
+    required String correctAnswer,
+    String? moduleId,
+    String? questionImageGdriveId,
+    String questionType = 'multiple_choice',
+    List<Map<String, dynamic>>? options,
+    String? explanation,
+    int points = 10,
+    int orderIndex = 0,
+  }) async {
+    try {
+      final response = await client
+          .from('questions')
+          .insert({
+            'quiz_id': quizId,
+            'module_id': moduleId,
+            'question_text': questionText,
+            'question_image_gdrive_id': questionImageGdriveId,
+            'question_type': questionType,
+            'options': options,
+            'correct_answer': correctAnswer,
+            'explanation': explanation,
+            'points': points,
+            'order_index': orderIndex,
+            'is_active': true,
+          })
+          .select()
+          .single();
+      return response;
+    } catch (e) {
+      debugPrint('Error createQuestionWithDetails: $e');
+      rethrow;
     }
   }
 
@@ -277,7 +384,7 @@ class SupabaseService {
       await client.from('questions').update(data).eq('id', id);
       return true;
     } catch (e) {
-      print('Update question error: $e');
+      debugPrint('Update question error: $e');
       return false;
     }
   }
@@ -287,7 +394,7 @@ class SupabaseService {
       await client.from('questions').delete().eq('id', id);
       return true;
     } catch (e) {
-      print('Delete question error: $e');
+      debugPrint('Delete question error: $e');
       return false;
     }
   }
@@ -299,7 +406,7 @@ class SupabaseService {
       await client.from('user_answers').insert(data);
       return true;
     } catch (e) {
-      print('Submit answer error: $e');
+      debugPrint('Submit answer error: $e');
       return false;
     }
   }
@@ -317,7 +424,61 @@ class SupabaseService {
           .order('answered_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('Get user answers error: $e');
+      debugPrint('Get user answers error: $e');
+      return [];
+    }
+  }
+
+  /// Menyimpan jawaban user (untuk quiz system)
+  static Future<void> saveUserAnswer({
+    required String questionId,
+    required String selectedAnswer,
+    required bool isCorrect,
+    String? moduleId,
+    int attemptNumber = 1,
+    int? timeSpentSeconds,
+  }) async {
+    try {
+      final userId = currentUserId;
+      if (userId == null) throw Exception('User not logged in');
+
+      await client.from('user_answers').insert({
+        'user_id': userId,
+        'question_id': questionId,
+        'module_id': moduleId,
+        'attempt_number': attemptNumber,
+        'selected_answer': selectedAnswer,
+        'is_correct': isCorrect,
+        'time_spent_seconds': timeSpentSeconds,
+      });
+    } catch (e) {
+      debugPrint('Error saveUserAnswer: $e');
+      rethrow;
+    }
+  }
+
+  /// Mengambil riwayat quiz user
+  static Future<List<Map<String, dynamic>>> getUserQuizHistory({
+    String? quizId,
+    String? moduleId,
+  }) async {
+    try {
+      final userId = currentUserId;
+      if (userId == null) return [];
+
+      var query = client
+          .from('user_answers')
+          .select('*, questions(*)')
+          .eq('user_id', userId);
+
+      if (moduleId != null) {
+        query = query.eq('module_id', moduleId);
+      }
+
+      final response = await query.order('answered_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error getUserQuizHistory: $e');
       return [];
     }
   }
@@ -329,7 +490,7 @@ class SupabaseService {
       await client.from('activity_logs').insert(data);
       return true;
     } catch (e) {
-      print('Log activity error: $e');
+      debugPrint('Log activity error: $e');
       return false;
     }
   }
@@ -342,7 +503,7 @@ class SupabaseService {
       await client.from('activity_logs').update(data).eq('id', id);
       return true;
     } catch (e) {
-      print('Update activity log error: $e');
+      debugPrint('Update activity log error: $e');
       return false;
     }
   }
@@ -378,7 +539,7 @@ class SupabaseService {
 
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('Get activity logs error: $e');
+      debugPrint('Get activity logs error: $e');
       return [];
     }
   }
@@ -398,7 +559,7 @@ class SupabaseService {
           .maybeSingle();
       return response;
     } catch (e) {
-      print('Get user progress error: $e');
+      debugPrint('Get user progress error: $e');
       return null;
     }
   }
@@ -411,7 +572,7 @@ class SupabaseService {
           );
       return true;
     } catch (e) {
-      print('Upsert user progress error: $e');
+      debugPrint('Upsert user progress error: $e');
       return false;
     }
   }
@@ -430,7 +591,7 @@ class SupabaseService {
           .order('last_accessed_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('Get all user progress error: $e');
+      debugPrint('Get all user progress error: $e');
       return [];
     }
   }
@@ -445,7 +606,7 @@ class SupabaseService {
           .order('created_at', ascending: false);
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      print('Get all users error: $e');
+      debugPrint('Get all users error: $e');
       return [];
     }
   }
@@ -459,7 +620,7 @@ class SupabaseService {
       await client.from('users').insert(data);
       return true;
     } catch (e) {
-      print('Create user error: $e');
+      debugPrint('Create user error: $e');
       return false;
     }
   }
@@ -473,7 +634,7 @@ class SupabaseService {
       await client.from('users').update(data).eq('id', id);
       return true;
     } catch (e) {
-      print('Update user error: $e');
+      debugPrint('Update user error: $e');
       return false;
     }
   }
@@ -483,7 +644,7 @@ class SupabaseService {
       await client.from('users').delete().eq('id', id);
       return true;
     } catch (e) {
-      print('Delete user error: $e');
+      debugPrint('Delete user error: $e');
       return false;
     }
   }
@@ -510,7 +671,7 @@ class SupabaseService {
       );
       return true;
     } catch (e) {
-      print('Save FCM token error: $e');
+      debugPrint('Save FCM token error: $e');
       return false;
     }
   }
@@ -523,7 +684,7 @@ class SupabaseService {
           .eq('is_active', true);
       return (response as List).map((e) => e['fcm_token'] as String).toList();
     } catch (e) {
-      print('Get FCM tokens error: $e');
+      debugPrint('Get FCM tokens error: $e');
       return [];
     }
   }
@@ -535,8 +696,172 @@ class SupabaseService {
       await client.from('content_updates').insert(data);
       return true;
     } catch (e) {
-      print('Create content update error: $e');
+      debugPrint('Create content update error: $e');
       return false;
+    }
+  }
+
+  // ==================== MECA AID FOLDERS ====================
+
+  /// Mengambil daftar folder Meca Aid dari tabel meca_aid_folders
+  static Future<List<Map<String, dynamic>>> getMecaAidFolders() async {
+    try {
+      final response = await client
+          .from('meca_aid_folders')
+          .select()
+          .eq('is_active', true)
+          .order('order_index', ascending: true)
+          .order('folder_name', ascending: true);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error getMecaAidFolders: $e');
+      rethrow;
+    }
+  }
+
+  /// Menghitung jumlah folder Meca Aid aktif
+  static Future<int> countMecaAidFolders() async {
+    try {
+      final response = await client
+          .from('meca_aid_folders')
+          .select('id')
+          .eq('is_active', true);
+      return (response as List).length;
+    } catch (e) {
+      debugPrint('Error countMecaAidFolders: $e');
+      return 0;
+    }
+  }
+
+  /// Membuat folder Meca Aid baru
+  static Future<Map<String, dynamic>> createMecaAidFolder({
+    required String gdriveFolderId,
+    required String folderName,
+    String? description,
+    int orderIndex = 0,
+  }) async {
+    try {
+      final response = await client
+          .from('meca_aid_folders')
+          .insert({
+            'gdrive_folder_id': gdriveFolderId,
+            'folder_name': folderName,
+            'description': description,
+            'order_index': orderIndex,
+            'is_active': true,
+          })
+          .select()
+          .single();
+      return response;
+    } catch (e) {
+      debugPrint('Error createMecaAidFolder: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== QUIZZES ====================
+
+  /// Mengambil daftar quiz dari tabel quizzes
+  static Future<List<Map<String, dynamic>>> getQuizzes({
+    String? quizType,
+  }) async {
+    try {
+      var query = client.from('quizzes').select().eq('is_active', true);
+
+      if (quizType != null) {
+        query = query.eq('quiz_type', quizType);
+      }
+
+      final response = await query.order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error getQuizzes: $e');
+      rethrow;
+    }
+  }
+
+  /// Mengambil quiz berdasarkan ID
+  static Future<Map<String, dynamic>?> getQuizById(String quizId) async {
+    try {
+      final response =
+          await client.from('quizzes').select().eq('id', quizId).single();
+      return response;
+    } catch (e) {
+      debugPrint('Error getQuizById: $e');
+      return null;
+    }
+  }
+
+  /// Menghitung jumlah quiz aktif
+  static Future<int> countQuizzes({String? quizType}) async {
+    try {
+      var query = client.from('quizzes').select('id').eq('is_active', true);
+
+      if (quizType != null) {
+        query = query.eq('quiz_type', quizType);
+      }
+
+      final response = await query;
+      return (response as List).length;
+    } catch (e) {
+      debugPrint('Error countQuizzes: $e');
+      return 0;
+    }
+  }
+
+  /// Membuat quiz baru
+  static Future<Map<String, dynamic>> createQuiz({
+    required String title,
+    String? description,
+    String quizType = 'quiz',
+    String? moduleId,
+    String? sourceGdriveId,
+    String? sourceGdriveName,
+    int? timeLimitMinutes,
+    int passingScore = 70,
+    int? maxAttempts,
+    bool shuffleQuestions = false,
+    bool shuffleOptions = false,
+    bool showCorrectAnswers = true,
+  }) async {
+    try {
+      final response = await client
+          .from('quizzes')
+          .insert({
+            'title': title,
+            'description': description,
+            'quiz_type': quizType,
+            'module_id': moduleId,
+            'source_gdrive_id': sourceGdriveId,
+            'source_gdrive_name': sourceGdriveName,
+            'time_limit_minutes': timeLimitMinutes,
+            'passing_score': passingScore,
+            'max_attempts': maxAttempts,
+            'shuffle_questions': shuffleQuestions,
+            'shuffle_options': shuffleOptions,
+            'show_correct_answers': showCorrectAnswers,
+            'is_active': true,
+          })
+          .select()
+          .single();
+      return response;
+    } catch (e) {
+      debugPrint('Error createQuiz: $e');
+      rethrow;
+    }
+  }
+
+  /// Update jumlah total soal pada quiz
+  static Future<void> updateQuizTotalQuestions(String quizId) async {
+    try {
+      final questions = await getQuestionsByQuizId(quizId);
+      await client.from('quizzes').update({
+        'total_questions': questions.length,
+      }).eq('id', quizId);
+    } catch (e) {
+      debugPrint('Error updateQuizTotalQuestions: $e');
+      rethrow;
     }
   }
 
@@ -584,7 +909,7 @@ class SupabaseService {
         'active_users_today': activeUsersToday,
       };
     } catch (e) {
-      print('Get analytics error: $e');
+      debugPrint('Get analytics error: $e');
       return {};
     }
   }
