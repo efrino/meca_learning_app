@@ -2,10 +2,10 @@ class ModuleModel {
   final String id;
   final String title;
   final String? description;
-  final String category; // 'module', 'animation', 'meca_aid'
+  final String category; // 'module', 'animation', 'meca_aid', 'meca_sheet'
   final String gdriveFileId;
   final String? gdriveUrl;
-  final String fileType; // 'pdf', 'mp4', 'image'
+  final String fileType; // 'pdf', 'mp4', 'image', 'xls', 'xlsx', 'swf'
   final String? thumbnailUrl;
   final String? thumbnailGdriveId;
   final int? durationMinutes;
@@ -14,6 +14,9 @@ class ModuleModel {
   final String? createdBy;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String?
+      parentFolderId; // Reference to meca_aid_folders.gdrive_folder_id
+  final String? folderName;
 
   ModuleModel({
     required this.id,
@@ -31,15 +34,20 @@ class ModuleModel {
     this.createdBy,
     required this.createdAt,
     required this.updatedAt,
+    this.parentFolderId,
+    this.folderName,
   });
 
   bool get isPdf => fileType == 'pdf';
   bool get isVideo => fileType == 'mp4';
   bool get isImage => fileType == 'image';
+  bool get isExcel => fileType == 'xls' || fileType == 'xlsx';
+  bool get isSwf => fileType == 'swf';
 
   bool get isModuleCategory => category == 'module';
   bool get isAnimationCategory => category == 'animation';
   bool get isMecaAidCategory => category == 'meca_aid';
+  bool get isMecaSheetCategory => category == 'meca_sheet';
 
   String get categoryLabel {
     switch (category) {
@@ -49,8 +57,28 @@ class ModuleModel {
         return 'Animasi';
       case 'meca_aid':
         return 'Meca Aid';
+      case 'meca_sheet':
+        return 'Meca Sheet';
       default:
         return category;
+    }
+  }
+
+  String get fileTypeLabel {
+    switch (fileType) {
+      case 'pdf':
+        return 'PDF';
+      case 'mp4':
+        return 'Video';
+      case 'image':
+        return 'Gambar';
+      case 'xls':
+      case 'xlsx':
+        return 'Excel';
+      case 'swf':
+        return 'Flash';
+      default:
+        return fileType.toUpperCase();
     }
   }
 
@@ -84,6 +112,8 @@ class ModuleModel {
       createdBy: json['created_by'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
+      parentFolderId: json['parent_folder_id'] as String?,
+      folderName: json['folder_name'] as String?,
     );
   }
 
@@ -104,6 +134,8 @@ class ModuleModel {
       'created_by': createdBy,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'parent_folder_id': parentFolderId,
+      'folder_name': folderName,
     };
   }
 
@@ -121,6 +153,8 @@ class ModuleModel {
       'order_index': orderIndex,
       'is_active': isActive,
       'created_by': createdBy,
+      'parent_folder_id': parentFolderId,
+      'folder_name': folderName,
     };
   }
 
@@ -140,6 +174,8 @@ class ModuleModel {
     String? createdBy,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? parentFolderId,
+    String? folderName,
   }) {
     return ModuleModel(
       id: id ?? this.id,
@@ -157,6 +193,8 @@ class ModuleModel {
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      parentFolderId: parentFolderId ?? this.parentFolderId,
+      folderName: folderName ?? this.folderName,
     );
   }
 
@@ -183,6 +221,12 @@ class ModuleModel {
   /// URL untuk video streaming dari Google Drive
   String get gdriveVideoUrl {
     if (!isVideo) return '';
+    return 'https://drive.google.com/uc?export=download&id=$gdriveFileId';
+  }
+
+  /// URL untuk file Excel dari Google Drive
+  String get gdriveExcelUrl {
+    if (!isExcel) return '';
     return 'https://drive.google.com/uc?export=download&id=$gdriveFileId';
   }
 

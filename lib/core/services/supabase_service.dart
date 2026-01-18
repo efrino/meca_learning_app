@@ -179,22 +179,22 @@ class SupabaseService {
   }
 
   /// Mengambil modules berdasarkan parent_folder_id (gdrive_folder_id)
-  static Future<List<Map<String, dynamic>>> getModulesByFolder(
-      String folderId) async {
-    try {
-      final response = await client
-          .from('modules')
-          .select()
-          .eq('parent_folder_id', folderId)
-          .eq('is_active', true)
-          .order('order_index', ascending: true)
-          .order('title', ascending: true);
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      debugPrint('Error getModulesByFolder: $e');
-      rethrow;
-    }
-  }
+  // static Future<List<Map<String, dynamic>>> getModulesByFolder(
+  //     String folderId) async {
+  //   try {
+  //     final response = await client
+  //         .from('modules')
+  //         .select()
+  //         .eq('parent_folder_id', folderId)
+  //         .eq('is_active', true)
+  //         .order('order_index', ascending: true)
+  //         .order('title', ascending: true);
+  //     return List<Map<String, dynamic>>.from(response);
+  //   } catch (e) {
+  //     debugPrint('Error getModulesByFolder: $e');
+  //     rethrow;
+  //   }
+  // }
 
   // ==================== ERROR CODES ====================
 
@@ -300,7 +300,6 @@ class SupabaseService {
       return response.map((item) {
         return item;
       }).toList();
-    
     } catch (e) {
       debugPrint('Get questions error: $e');
       return [];
@@ -322,7 +321,6 @@ class SupabaseService {
       return response.map((item) {
         return item;
       }).toList();
-    
     } catch (e) {
       debugPrint('Error getQuestionsByQuizId: $e');
       rethrow;
@@ -702,22 +700,99 @@ class SupabaseService {
   }
 
   // ==================== MECA AID FOLDERS ====================
-
-  /// Mengambil daftar folder Meca Aid dari tabel meca_aid_folders
-  static Future<List<Map<String, dynamic>>> getMecaAidFolders() async {
+  /// Get all active Meca Aid folders
+  static Future<List<Map<String, dynamic>>> getMecaAidFolders({
+    bool activeOnly = true,
+  }) async {
     try {
-      final response = await client
-          .from('meca_aid_folders')
-          .select()
-          .eq('is_active', true)
-          .order('order_index', ascending: true)
-          .order('folder_name', ascending: true);
+      var query = client.from('meca_aid_folders').select();
+
+      if (activeOnly) {
+        query = query.eq('is_active', true);
+      }
+
+      final response = await query.order('order_index');
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
-      debugPrint('Error getMecaAidFolders: $e');
-      rethrow;
+      print('Get meca aid folders error: $e');
+      return [];
     }
   }
+
+  /// Get modules by parent folder ID (meca_aid_folders.id UUID)
+  /// parent_folder_id di modules = id di meca_aid_folders
+  static Future<List<Map<String, dynamic>>> getModulesByFolder(
+    String folderId, {
+    bool activeOnly = true,
+  }) async {
+    try {
+      var query = client
+          .from('modules')
+          .select()
+          .eq('parent_folder_id', folderId)
+          .eq('category', 'meca_aid'); // Filter category juga
+
+      if (activeOnly) {
+        query = query.eq('is_active', true);
+      }
+
+      final response = await query.order('order_index');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Get modules by folder error: $e');
+      return [];
+    }
+  }
+
+  /// Create a new Meca Aid folder
+  static Future<bool> createMecaAidFolder(Map<String, dynamic> data) async {
+    try {
+      await client.from('meca_aid_folders').insert(data);
+      return true;
+    } catch (e) {
+      print('Create meca aid folder error: $e');
+      return false;
+    }
+  }
+
+  /// Update a Meca Aid folder
+  static Future<bool> updateMecaAidFolder(
+      String id, Map<String, dynamic> data) async {
+    try {
+      await client.from('meca_aid_folders').update(data).eq('id', id);
+      return true;
+    } catch (e) {
+      print('Update meca aid folder error: $e');
+      return false;
+    }
+  }
+
+  /// Delete a Meca Aid folder
+  static Future<bool> deleteMecaAidFolder(String id) async {
+    try {
+      await client.from('meca_aid_folders').delete().eq('id', id);
+      return true;
+    } catch (e) {
+      print('Delete meca aid folder error: $e');
+      return false;
+    }
+  }
+
+  /// Mengambil daftar folder Meca Aid dari tabel meca_aid_folders
+  // static Future<List<Map<String, dynamic>>> getMecaAidFolders() async {
+  //   try {
+  //     final response = await client
+  //         .from('meca_aid_folders')
+  //         .select()
+  //         .eq('is_active', true)
+  //         .order('order_index', ascending: true)
+  //         .order('folder_name', ascending: true);
+  //     return List<Map<String, dynamic>>.from(response);
+  //   } catch (e) {
+  //     debugPrint('Error getMecaAidFolders: $e');
+  //     rethrow;
+  //   }
+  // }
 
   /// Menghitung jumlah folder Meca Aid aktif
   static Future<int> countMecaAidFolders() async {
@@ -734,30 +809,30 @@ class SupabaseService {
   }
 
   /// Membuat folder Meca Aid baru
-  static Future<Map<String, dynamic>> createMecaAidFolder({
-    required String gdriveFolderId,
-    required String folderName,
-    String? description,
-    int orderIndex = 0,
-  }) async {
-    try {
-      final response = await client
-          .from('meca_aid_folders')
-          .insert({
-            'gdrive_folder_id': gdriveFolderId,
-            'folder_name': folderName,
-            'description': description,
-            'order_index': orderIndex,
-            'is_active': true,
-          })
-          .select()
-          .single();
-      return response;
-    } catch (e) {
-      debugPrint('Error createMecaAidFolder: $e');
-      rethrow;
-    }
-  }
+  // static Future<Map<String, dynamic>> createMecaAidFolder({
+  //   required String gdriveFolderId,
+  //   required String folderName,
+  //   String? description,
+  //   int orderIndex = 0,
+  // }) async {
+  //   try {
+  //     final response = await client
+  //         .from('meca_aid_folders')
+  //         .insert({
+  //           'gdrive_folder_id': gdriveFolderId,
+  //           'folder_name': folderName,
+  //           'description': description,
+  //           'order_index': orderIndex,
+  //           'is_active': true,
+  //         })
+  //         .select()
+  //         .single();
+  //     return response;
+  //   } catch (e) {
+  //     debugPrint('Error createMecaAidFolder: $e');
+  //     rethrow;
+  //   }
+  // }
 
   // ==================== QUIZZES ====================
 

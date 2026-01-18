@@ -4,8 +4,12 @@ class ErrorCodeModel {
   final String title;
   final String cause;
   final String solution;
+  final String? errorIdentification;
+  final String? symptom;
+  final String? notes;
   final String? category;
   final String? machineType;
+  final String? serialNumber;
   final String severity; // 'low', 'medium', 'high', 'critical'
   final bool isActive;
   final String? createdBy;
@@ -19,8 +23,12 @@ class ErrorCodeModel {
     required this.title,
     required this.cause,
     required this.solution,
+    this.errorIdentification,
+    this.symptom,
+    this.notes,
     this.category,
     this.machineType,
+    this.serialNumber,
     this.severity = 'medium',
     this.isActive = true,
     this.createdBy,
@@ -58,8 +66,12 @@ class ErrorCodeModel {
       title: json['title'] as String,
       cause: json['cause'] as String,
       solution: json['solution'] as String,
+      errorIdentification: json['error_identification'] as String?,
+      symptom: json['symptom'] as String?,
+      notes: json['notes'] as String?,
       category: json['category'] as String?,
       machineType: json['machine_type'] as String?,
+      serialNumber: json['serial_number'] as String?,
       severity: json['severity'] as String? ?? 'medium',
       isActive: json['is_active'] as bool? ?? true,
       createdBy: json['created_by'] as String?,
@@ -76,8 +88,12 @@ class ErrorCodeModel {
       'title': title,
       'cause': cause,
       'solution': solution,
+      'error_identification': errorIdentification,
+      'symptom': symptom,
+      'notes': notes,
       'category': category,
       'machine_type': machineType,
+      'serial_number': serialNumber,
       'severity': severity,
       'is_active': isActive,
       'created_by': createdBy,
@@ -92,8 +108,12 @@ class ErrorCodeModel {
       'title': title,
       'cause': cause,
       'solution': solution,
+      'error_identification': errorIdentification,
+      'symptom': symptom,
+      'notes': notes,
       'category': category,
       'machine_type': machineType,
+      'serial_number': serialNumber,
       'severity': severity,
       'is_active': isActive,
       'created_by': createdBy,
@@ -106,8 +126,12 @@ class ErrorCodeModel {
     String? title,
     String? cause,
     String? solution,
+    String? errorIdentification,
+    String? symptom,
+    String? notes,
     String? category,
     String? machineType,
+    String? serialNumber,
     String? severity,
     bool? isActive,
     String? createdBy,
@@ -121,8 +145,12 @@ class ErrorCodeModel {
       title: title ?? this.title,
       cause: cause ?? this.cause,
       solution: solution ?? this.solution,
+      errorIdentification: errorIdentification ?? this.errorIdentification,
+      symptom: symptom ?? this.symptom,
+      notes: notes ?? this.notes,
       category: category ?? this.category,
       machineType: machineType ?? this.machineType,
+      serialNumber: serialNumber ?? this.serialNumber,
       severity: severity ?? this.severity,
       isActive: isActive ?? this.isActive,
       createdBy: createdBy ?? this.createdBy,

@@ -121,6 +121,23 @@ class QuestionModel {
     required this.updatedAt,
   });
 
+  bool get isMultipleChoice => questionType == 'multiple_choice';
+  bool get isTrueFalse => questionType == 'true_false';
+  bool get isEssay => questionType == 'essay';
+
+  String get questionTypeLabel {
+    switch (questionType) {
+      case 'multiple_choice':
+        return 'Pilihan Ganda';
+      case 'true_false':
+        return 'Benar/Salah';
+      case 'essay':
+        return 'Essay';
+      default:
+        return questionType;
+    }
+  }
+
   factory QuestionModel.fromJson(Map<String, dynamic> json) {
     // Parse options - bisa berupa List atau Map dari database
     List<Map<String, dynamic>>? parsedOptions;
@@ -128,9 +145,6 @@ class QuestionModel {
     try {
       if (json['options'] != null) {
         final rawOptions = json['options'];
-
-        // Debug: print type of rawOptions
-        // debugPrint('Options type: ${rawOptions.runtimeType}');
 
         if (rawOptions is List) {
           // Jika sudah berupa List
@@ -176,7 +190,6 @@ class QuestionModel {
     } catch (e) {
       // Jika gagal parsing options, gunakan null
       parsedOptions = null;
-      // debugPrint('Error parsing options: $e');
     }
 
     return QuestionModel(
@@ -214,6 +227,57 @@ class QuestionModel {
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
+  }
+
+  Map<String, dynamic> toInsertJson() {
+    return {
+      'module_id': moduleId,
+      'quiz_id': quizId,
+      'question_text': questionText,
+      'question_image_gdrive_id': questionImageGdriveId,
+      'question_type': questionType,
+      'options': options,
+      'correct_answer': correctAnswer,
+      'explanation': explanation,
+      'points': points,
+      'order_index': orderIndex,
+      'is_active': isActive,
+    };
+  }
+
+  QuestionModel copyWith({
+    String? id,
+    String? moduleId,
+    String? quizId,
+    String? questionText,
+    String? questionImageGdriveId,
+    String? questionType,
+    List<Map<String, dynamic>>? options,
+    String? correctAnswer,
+    String? explanation,
+    int? points,
+    int? orderIndex,
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return QuestionModel(
+      id: id ?? this.id,
+      moduleId: moduleId ?? this.moduleId,
+      quizId: quizId ?? this.quizId,
+      questionText: questionText ?? this.questionText,
+      questionImageGdriveId:
+          questionImageGdriveId ?? this.questionImageGdriveId,
+      questionType: questionType ?? this.questionType,
+      options: options ?? this.options,
+      correctAnswer: correctAnswer ?? this.correctAnswer,
+      explanation: explanation ?? this.explanation,
+      points: points ?? this.points,
+      orderIndex: orderIndex ?? this.orderIndex,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
   }
 
   /// Get list of option texts
@@ -258,52 +322,68 @@ class QuestionModel {
 }
 
 /// ============================================================
-/// MODEL: MECA AID FOLDER
+/// MODEL: USER ANSWER
 /// ============================================================
-class MecaAidFolder {
+class UserAnswerModel {
   final String id;
-  final String gdriveFolderId;
-  final String folderName;
-  final String? description;
-  final int orderIndex;
-  final bool isActive;
-  final DateTime createdAt;
-  final DateTime updatedAt;
+  final String userId;
+  final String questionId;
+  final String moduleId;
+  final int attemptNumber;
+  final String selectedAnswer;
+  final bool isCorrect;
+  final int? timeSpentSeconds;
+  final DateTime answeredAt;
 
-  MecaAidFolder({
+  UserAnswerModel({
     required this.id,
-    required this.gdriveFolderId,
-    required this.folderName,
-    this.description,
-    this.orderIndex = 0,
-    this.isActive = true,
-    required this.createdAt,
-    required this.updatedAt,
+    required this.userId,
+    required this.questionId,
+    required this.moduleId,
+    this.attemptNumber = 1,
+    required this.selectedAnswer,
+    required this.isCorrect,
+    this.timeSpentSeconds,
+    required this.answeredAt,
   });
 
-  factory MecaAidFolder.fromJson(Map<String, dynamic> json) {
-    return MecaAidFolder(
+  factory UserAnswerModel.fromJson(Map<String, dynamic> json) {
+    return UserAnswerModel(
       id: json['id'] as String,
-      gdriveFolderId: json['gdrive_folder_id'] as String,
-      folderName: json['folder_name'] as String,
-      description: json['description'] as String?,
-      orderIndex: json['order_index'] as int? ?? 0,
-      isActive: json['is_active'] as bool? ?? true,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      userId: json['user_id'] as String,
+      questionId: json['question_id'] as String,
+      moduleId: json['module_id'] as String,
+      attemptNumber: json['attempt_number'] as int? ?? 1,
+      selectedAnswer: json['selected_answer'] as String,
+      isCorrect: json['is_correct'] as bool,
+      timeSpentSeconds: json['time_spent_seconds'] as int?,
+      answeredAt: DateTime.parse(json['answered_at'] as String),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'gdrive_folder_id': gdriveFolderId,
-      'folder_name': folderName,
-      'description': description,
-      'order_index': orderIndex,
-      'is_active': isActive,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
+      'user_id': userId,
+      'question_id': questionId,
+      'module_id': moduleId,
+      'attempt_number': attemptNumber,
+      'selected_answer': selectedAnswer,
+      'is_correct': isCorrect,
+      'time_spent_seconds': timeSpentSeconds,
+      'answered_at': answeredAt.toIso8601String(),
+    };
+  }
+
+  Map<String, dynamic> toInsertJson() {
+    return {
+      'user_id': userId,
+      'question_id': questionId,
+      'module_id': moduleId,
+      'attempt_number': attemptNumber,
+      'selected_answer': selectedAnswer,
+      'is_correct': isCorrect,
+      'time_spent_seconds': timeSpentSeconds,
     };
   }
 }

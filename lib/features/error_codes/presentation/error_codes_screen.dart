@@ -59,13 +59,21 @@ class _ErrorCodesScreenState extends State<ErrorCodesScreen> {
       if (query.isEmpty) {
         _filteredErrorCodes = _errorCodes;
       } else {
-        _filteredErrorCodes = _errorCodes
-            .where((code) =>
-                code.code.toLowerCase().contains(query.toLowerCase()) ||
-                code.title.toLowerCase().contains(query.toLowerCase()) ||
-                code.cause.toLowerCase().contains(query.toLowerCase()) ||
-                code.solution.toLowerCase().contains(query.toLowerCase()))
-            .toList();
+        final lowerQuery = query.toLowerCase();
+        _filteredErrorCodes = _errorCodes.where((code) {
+          return code.code.toLowerCase().contains(lowerQuery) ||
+              code.title.toLowerCase().contains(lowerQuery) ||
+              code.cause.toLowerCase().contains(lowerQuery) ||
+              code.solution.toLowerCase().contains(lowerQuery) ||
+              (code.symptom?.toLowerCase().contains(lowerQuery) ?? false) ||
+              (code.errorIdentification?.toLowerCase().contains(lowerQuery) ??
+                  false) ||
+              (code.notes?.toLowerCase().contains(lowerQuery) ?? false) ||
+              (code.serialNumber?.toLowerCase().contains(lowerQuery) ??
+                  false) ||
+              (code.category?.toLowerCase().contains(lowerQuery) ?? false) ||
+              (code.machineType?.toLowerCase().contains(lowerQuery) ?? false);
+        }).toList();
       }
     });
 
@@ -132,31 +140,46 @@ class _ErrorCodesScreenState extends State<ErrorCodesScreen> {
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: TextField(
-        controller: _searchController,
-        onChanged: _filterErrorCodes,
-        decoration: InputDecoration(
-          hintText: 'Cari kode error...',
-          prefixIcon:
-              const Icon(Iconsax.search_normal, color: AppTheme.textLight),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Iconsax.close_circle,
-                      color: AppTheme.textLight),
-                  onPressed: () {
-                    _searchController.clear();
-                    _filterErrorCodes('');
-                  },
-                )
-              : null,
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _searchController,
+            onChanged: _filterErrorCodes,
+            decoration: InputDecoration(
+              hintText: 'Cari kode, gejala, penyebab...',
+              prefixIcon:
+                  const Icon(Iconsax.search_normal, color: AppTheme.textLight),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Iconsax.close_circle,
+                          color: AppTheme.textLight),
+                      onPressed: () {
+                        _searchController.clear();
+                        _filterErrorCodes('');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+          ),
+          if (_searchController.text.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Ditemukan ${_filteredErrorCodes.length} dari ${_errorCodes.length} error code',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -254,21 +277,26 @@ class _ErrorCodeCard extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: 16, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
+                // Show symptom if available, otherwise show cause
                 Text(
-                  errorCode.cause,
+                  errorCode.symptom ?? errorCode.cause,
                   style: const TextStyle(
                       fontSize: 13, color: AppTheme.textSecondary),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (errorCode.machineType != null ||
-                    errorCode.category != null) ...[
+                    errorCode.category != null ||
+                    errorCode.serialNumber != null) ...[
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 6,
                     children: [
                       if (errorCode.machineType != null)
                         _buildTag(Iconsax.cpu, errorCode.machineType!),
+                      if (errorCode.serialNumber != null)
+                        _buildTag(Iconsax.barcode, errorCode.serialNumber!),
                       if (errorCode.category != null)
                         _buildTag(Iconsax.category, errorCode.category!),
                     ],

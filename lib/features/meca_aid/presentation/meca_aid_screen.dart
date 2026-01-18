@@ -5,6 +5,7 @@ import '../../../config/routes.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/services/activity_log_service.dart';
 import '../../../shared/models/module_model.dart';
+import '../../../shared/models/meca_aid_folder_model.dart';
 import '../../../shared/models/quiz_model.dart';
 import '../../../shared/widgets/common_widgets.dart';
 
@@ -516,7 +517,7 @@ class _SubFolderCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(Iconsax.arrow_right_3,
+                const Icon(Iconsax.arrow_right_3,
                     size: 18, color: AppTheme.textLight),
               ],
             ),
@@ -529,7 +530,8 @@ class _SubFolderCard extends StatelessWidget {
 
 /// ============================================================
 /// SCREEN: MECA AID FOLDER CONTENT
-/// Menampilkan isi folder (modules dengan parent_folder_id)
+/// Menampilkan isi folder (modules dengan parent_folder_id = folder.id)
+/// parent_folder_id di modules = id (UUID) di meca_aid_folders
 /// ============================================================
 class MecaAidFolderContentScreen extends StatefulWidget {
   final MecaAidFolder folder;
@@ -558,8 +560,8 @@ class _MecaAidFolderContentScreenState
       _error = null;
     });
     try {
-      final data = await SupabaseService.getModulesByFolder(
-          widget.folder.gdriveFolderId);
+      // Get modules where parent_folder_id matches folder's id (UUID)
+      final data = await SupabaseService.getModulesByFolder(widget.folder.id);
       setState(() {
         _items = data.map((e) => ModuleModel.fromJson(e)).toList();
         _isLoading = false;
@@ -613,7 +615,9 @@ class _MecaAidFolderContentScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(widget.folder.folderName,
-                    style: Theme.of(context).textTheme.titleLarge),
+                    style: Theme.of(context).textTheme.titleLarge,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
                 Text('${_items.length} file tersedia',
                     style: const TextStyle(
                         color: AppTheme.textSecondary, fontSize: 13)),
@@ -645,7 +649,6 @@ class _MecaAidFolderContentScreenState
           final item = _items[index];
           return _FileItemCard(
             item: item,
-            color: AppTheme.mecaAidColor,
             onTap: () => _openItem(item),
           );
         },
@@ -657,7 +660,15 @@ class _MecaAidFolderContentScreenState
     ActivityLogService().logButtonClick(
         buttonId: 'open_meca_aid_item_${item.id}',
         screenName: 'meca_aid_folder_content');
-    Navigator.pushNamed(context, AppRoutes.mecaAidDetail, arguments: item);
+
+    // Navigate based on file type
+    if (item.isExcel) {
+      Navigator.pushNamed(context, AppRoutes.excelViewer, arguments: item);
+    } else if (item.isVideo) {
+      Navigator.pushNamed(context, AppRoutes.animationPlayer, arguments: item);
+    } else {
+      Navigator.pushNamed(context, AppRoutes.mecaAidDetail, arguments: item);
+    }
   }
 }
 
@@ -787,7 +798,7 @@ class _MecaSheetListScreenState extends State<MecaSheetListScreen> {
     ActivityLogService().logButtonClick(
         buttonId: 'open_meca_sheet_${item.id}', screenName: 'meca_sheet_list');
     // Buka sesuai file type
-    if (item.fileType == 'xls' || item.fileType == 'xlsx') {
+    if (item.isExcel) {
       Navigator.pushNamed(context, AppRoutes.excelViewer, arguments: item);
     } else {
       Navigator.pushNamed(context, AppRoutes.mecaAidDetail, arguments: item);
@@ -1044,7 +1055,7 @@ class _QuizCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(Iconsax.arrow_right_3,
+                const Icon(Iconsax.arrow_right_3,
                     size: 18, color: AppTheme.textLight),
               ],
             ),
@@ -1089,15 +1100,16 @@ class _QuizCard extends StatelessWidget {
 
 /// ============================================================
 /// FILE ITEM CARD (untuk Meca Aid & Meca Sheet)
+/// color parameter is optional - will auto-detect based on file type
 /// ============================================================
 class _FileItemCard extends StatelessWidget {
   final ModuleModel item;
-  final Color color;
+  final Color? color; // Made optional
   final VoidCallback onTap;
 
   const _FileItemCard({
     required this.item,
-    required this.color,
+    this.color, // Now optional
     required this.onTap,
   });
 
@@ -1112,6 +1124,8 @@ class _FileItemCard extends StatelessWidget {
         return Iconsax.play_circle;
       case 'image':
         return Iconsax.image;
+      case 'swf':
+        return Iconsax.video_play;
       default:
         return Iconsax.document;
     }
@@ -1128,13 +1142,37 @@ class _FileItemCard extends StatelessWidget {
         return 'Video';
       case 'image':
         return 'Gambar';
+      case 'swf':
+        return 'Animasi';
       default:
         return item.fileType.toUpperCase();
     }
   }
 
+  /// Get color based on file type if not provided
+  Color get _effectiveColor {
+    if (color != null) return color!;
+    switch (item.fileType) {
+      case 'pdf':
+        return const Color(0xFFE53935); // Red
+      case 'xls':
+      case 'xlsx':
+        return const Color(0xFF43A047); // Green
+      case 'mp4':
+        return const Color(0xFF1E88E5); // Blue
+      case 'image':
+        return const Color(0xFF8E24AA); // Purple
+      case 'swf':
+        return const Color(0xFFFF9800); // Orange
+      default:
+        return AppTheme.mecaAidColor;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = _effectiveColor;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -1155,10 +1193,10 @@ class _FileItemCard extends StatelessWidget {
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: effectiveColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(_fileIcon, color: color, size: 28),
+                  child: Icon(_fileIcon, color: effectiveColor, size: 28),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -1188,7 +1226,7 @@ class _FileItemCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.1),
+                          color: effectiveColor.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -1196,14 +1234,14 @@ class _FileItemCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: color,
+                            color: effectiveColor,
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                Icon(Iconsax.arrow_right_3,
+                const Icon(Iconsax.arrow_right_3,
                     size: 18, color: AppTheme.textLight),
               ],
             ),

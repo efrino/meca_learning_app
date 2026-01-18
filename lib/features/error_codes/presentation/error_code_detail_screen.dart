@@ -108,6 +108,9 @@ class _ErrorCodeDetailScreenState extends State<ErrorCodeDetailScreen> {
                       if (widget.errorCode.machineType != null)
                         _buildInfoChip(
                             Iconsax.cpu, widget.errorCode.machineType!),
+                      if (widget.errorCode.serialNumber != null)
+                        _buildInfoChip(
+                            Iconsax.barcode, widget.errorCode.serialNumber!),
                       if (widget.errorCode.category != null)
                         _buildInfoChip(
                             Iconsax.category, widget.errorCode.category!),
@@ -115,7 +118,31 @@ class _ErrorCodeDetailScreenState extends State<ErrorCodeDetailScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Cause section
+                  // Symptom section (Gejala)
+                  if (widget.errorCode.symptom != null &&
+                      widget.errorCode.symptom!.isNotEmpty) ...[
+                    _buildSection(
+                      icon: Iconsax.health,
+                      title: 'Gejala',
+                      color: AppTheme.primaryColor,
+                      content: widget.errorCode.symptom!,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // Error Identification section
+                  if (widget.errorCode.errorIdentification != null &&
+                      widget.errorCode.errorIdentification!.isNotEmpty) ...[
+                    _buildSection(
+                      icon: Iconsax.search_status,
+                      title: 'Identifikasi Error',
+                      color: AppTheme.primaryColor,
+                      content: widget.errorCode.errorIdentification!,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // Cause section (Penyebab)
                   _buildSection(
                     icon: Iconsax.warning_2,
                     title: 'Penyebab',
@@ -124,13 +151,25 @@ class _ErrorCodeDetailScreenState extends State<ErrorCodeDetailScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Solution section
+                  // Solution section (Solusi)
                   _buildSection(
                     icon: Iconsax.tick_circle,
                     title: 'Solusi',
                     color: AppTheme.successColor,
                     content: widget.errorCode.solution,
                   ),
+
+                  // Notes section (Catatan)
+                  if (widget.errorCode.notes != null &&
+                      widget.errorCode.notes!.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    _buildSection(
+                      icon: Iconsax.note_text,
+                      title: 'Catatan',
+                      color: AppTheme.textSecondary,
+                      content: widget.errorCode.notes!,
+                    ),
+                  ],
 
                   // Images section
                   if (widget.errorCode.images != null &&
