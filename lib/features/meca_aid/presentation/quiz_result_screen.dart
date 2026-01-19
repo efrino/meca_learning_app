@@ -5,7 +5,7 @@ import '../../../shared/models/quiz_model.dart';
 
 /// ============================================================
 /// QUIZ RESULT SCREEN
-/// Menampilkan hasil quiz
+/// Menampilkan hasil quiz dengan dukungan essay review
 /// ============================================================
 class QuizResultScreen extends StatelessWidget {
   final QuizModel quiz;
@@ -15,6 +15,7 @@ class QuizResultScreen extends StatelessWidget {
   final int timeSpent;
   final Map<String, String>? answers;
   final List<QuestionModel>? questions;
+  final int attemptNumber;
 
   const QuizResultScreen({
     super.key,
@@ -25,6 +26,7 @@ class QuizResultScreen extends StatelessWidget {
     required this.timeSpent,
     this.answers,
     this.questions,
+    this.attemptNumber = 1,
   });
 
   bool get isPassed => score >= quiz.passingScore;
@@ -76,7 +78,16 @@ class QuizResultScreen extends StatelessWidget {
 
               // Stats Row
               _buildStatsRow(),
-              const SizedBox(height: 32),
+              const SizedBox(height: 16),
+
+              // Attempt Info
+              _buildAttemptInfo(),
+              const SizedBox(height: 24),
+
+              // Question Type Summary
+              if (questions != null) _buildQuestionTypeSummary(),
+
+              const SizedBox(height: 16),
 
               // Review Button (jika showCorrectAnswers)
               if (quiz.showCorrectAnswers &&
@@ -278,6 +289,173 @@ class QuizResultScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildAttemptInfo() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _typeColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _typeColor.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Iconsax.repeat, color: _typeColor, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            'Percobaan ke-$attemptNumber',
+            style: TextStyle(
+              color: _typeColor,
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+          if (quiz.maxAttempts != null) ...[
+            Text(
+              ' dari ${quiz.maxAttempts} maksimal',
+              style: TextStyle(
+                color: _typeColor.withOpacity(0.7),
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuestionTypeSummary() {
+    if (questions == null) return const SizedBox.shrink();
+
+    final multipleChoice = questions!.where((q) => q.isMultipleChoice).toList();
+    final trueFalse = questions!.where((q) => q.isTrueFalse).toList();
+    final essay = questions!.where((q) => q.isEssay).toList();
+
+    // Count correct for each type
+    int mcCorrect = 0, tfCorrect = 0, essayCorrect = 0;
+
+    for (final q in multipleChoice) {
+      final userAnswer = answers?[q.id];
+      if (userAnswer != null && q.isCorrectAnswer(userAnswer)) mcCorrect++;
+    }
+    for (final q in trueFalse) {
+      final userAnswer = answers?[q.id];
+      if (userAnswer != null && q.isCorrectAnswer(userAnswer)) tfCorrect++;
+    }
+    for (final q in essay) {
+      final userAnswer = answers?[q.id];
+      if (userAnswer != null && q.isCorrectAnswer(userAnswer)) essayCorrect++;
+    }
+
+    if (multipleChoice.length == questions!.length) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Iconsax.category, color: _typeColor, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Hasil per Tipe Soal',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _typeColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (multipleChoice.isNotEmpty)
+            _buildTypeResult(
+              'Pilihan Ganda',
+              mcCorrect,
+              multipleChoice.length,
+              Colors.blue,
+            ),
+          if (trueFalse.isNotEmpty)
+            _buildTypeResult(
+              'Benar/Salah',
+              tfCorrect,
+              trueFalse.length,
+              Colors.orange,
+            ),
+          if (essay.isNotEmpty)
+            _buildTypeResult(
+              'Uraian',
+              essayCorrect,
+              essay.length,
+              Colors.purple,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTypeResult(String label, int correct, int total, Color color) {
+    final percentage = total > 0 ? ((correct / total) * 100).round() : 0;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          Text(
+            '$correct/$total',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: correct == total ? Colors.green : AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: percentage >= 70
+                  ? Colors.green.withOpacity(0.1)
+                  : Colors.red.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '$percentage%',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: percentage >= 70 ? Colors.green : Colors.red,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildReviewButton(BuildContext context) {
     return SizedBox(
       width: double.infinity,
@@ -445,6 +623,22 @@ class QuizResultScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _getQuestionTypeColor(question).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  question.questionTypeLabel,
+                  style: TextStyle(
+                    color: _getQuestionTypeColor(question),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
               const Spacer(),
               Icon(
                 isCorrect ? Iconsax.tick_circle : Iconsax.close_circle,
@@ -473,50 +667,8 @@ class QuizResultScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // User answer
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Jawaban kamu: ',
-                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-              ),
-              Expanded(
-                child: Text(
-                  userAnswer ?? '(tidak dijawab)',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: isCorrect ? Colors.green : Colors.red,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          // Correct answer (jika salah)
-          if (!isCorrect) ...[
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Jawaban benar: ',
-                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-                ),
-                Expanded(
-                  child: Text(
-                    question.correctAnswer,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.green,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          // User answer section
+          _buildAnswerDisplay(question, userAnswer, isCorrect),
 
           // Explanation
           if (question.explanation != null &&
@@ -560,6 +712,183 @@ class QuizResultScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildAnswerDisplay(
+    QuestionModel question,
+    String? userAnswer,
+    bool isCorrect,
+  ) {
+    if (question.isEssay) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // User's essay answer
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: (isCorrect ? Colors.green : Colors.red).withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: (isCorrect ? Colors.green : Colors.red).withOpacity(0.2),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Iconsax.edit_2,
+                      size: 14,
+                      color: isCorrect ? Colors.green : Colors.red,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Jawaban Anda:',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isCorrect ? Colors.green : Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  userAnswer ?? '(tidak dijawab)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: userAnswer != null
+                        ? AppTheme.textPrimary
+                        : AppTheme.textLight,
+                    fontStyle: userAnswer == null
+                        ? FontStyle.italic
+                        : FontStyle.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Expected answer
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.green.withOpacity(0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Iconsax.tick_circle, size: 14, color: Colors.green),
+                    SizedBox(width: 4),
+                    Text(
+                      'Kunci Jawaban:',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  question.correctAnswer,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // For multiple choice and true/false
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // User answer
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Jawaban kamu: ',
+              style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+            ),
+            Expanded(
+              child: Text(
+                _formatAnswer(question, userAnswer),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: isCorrect ? Colors.green : Colors.red,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        // Correct answer (jika salah)
+        if (!isCorrect) ...[
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Jawaban benar: ',
+                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+              ),
+              Expanded(
+                child: Text(
+                  _formatAnswer(question, question.correctAnswer),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.green,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _formatAnswer(QuestionModel question, String? answer) {
+    if (answer == null) return '(tidak dijawab)';
+
+    if (question.isMultipleChoice) {
+      final optionText = question.getOptionText(answer);
+      if (optionText != null) {
+        return '$answer. $optionText';
+      }
+    }
+
+    return answer;
+  }
+
+  Color _getQuestionTypeColor(QuestionModel question) {
+    switch (question.questionType) {
+      case 'multiple_choice':
+        return Colors.blue;
+      case 'true_false':
+        return Colors.orange;
+      case 'essay':
+        return Colors.purple;
+      default:
+        return _typeColor;
+    }
   }
 
   String _formatTime(int seconds) {

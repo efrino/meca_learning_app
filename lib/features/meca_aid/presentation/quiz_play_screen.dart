@@ -4,21 +4,24 @@ import 'package:iconsax/iconsax.dart';
 import '../../../config/theme.dart';
 import '../../../config/routes.dart';
 import '../../../core/services/supabase_service.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../core/services/activity_log_service.dart';
 import '../../../shared/models/quiz_model.dart';
 
 /// ============================================================
 /// QUIZ PLAY SCREEN
-/// Screen untuk mengerjakan quiz
+/// Screen untuk mengerjakan quiz dengan dukungan essay
 /// ============================================================
 class QuizPlayScreen extends StatefulWidget {
   final QuizModel quiz;
   final List<QuestionModel> questions;
+  final int attemptNumber;
 
   const QuizPlayScreen({
     super.key,
     required this.quiz,
     required this.questions,
+    this.attemptNumber = 1,
   });
 
   @override
@@ -28,6 +31,7 @@ class QuizPlayScreen extends StatefulWidget {
 class _QuizPlayScreenState extends State<QuizPlayScreen> {
   int _currentIndex = 0;
   Map<String, String> _answers = {};
+  Map<String, TextEditingController> _essayControllers = {};
   Timer? _timer;
   int _timeRemaining = 0;
   int _timeSpent = 0;
@@ -38,10 +42,19 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
   @override
   void initState() {
     super.initState();
+    _initEssayControllers();
     _startTimer();
     ActivityLogService().logButtonClick(
         buttonId: 'quiz_started_${widget.quiz.id}',
         screenName: 'quiz_play_screen');
+  }
+
+  void _initEssayControllers() {
+    for (final question in widget.questions) {
+      if (question.isEssay) {
+        _essayControllers[question.id] = TextEditingController();
+      }
+    }
   }
 
   void _startTimer() {
@@ -65,6 +78,9 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    for (final controller in _essayControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -106,6 +122,24 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
         },
       ),
       actions: [
+        // Attempt number badge
+        Container(
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: _typeColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            'Attempt #${widget.attemptNumber}',
+            style: TextStyle(
+              color: _typeColor,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        // Timer
         if (widget.quiz.timeLimitMinutes != null)
           Container(
             margin: const EdgeInsets.only(right: 16),
@@ -152,8 +186,8 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
           _buildQuestionCard(),
           const SizedBox(height: 20),
 
-          // Options
-          _buildOptions(),
+          // Answer section based on question type
+          _buildAnswerSection(),
         ],
       ),
     );
@@ -209,21 +243,42 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Question number badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: _typeColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              'Pertanyaan ${_currentIndex + 1}',
-              style: TextStyle(
-                color: _typeColor,
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
+          // Question type and number badge
+          Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _typeColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'Pertanyaan ${_currentIndex + 1}',
+                  style: TextStyle(
+                    color: _typeColor,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _getQuestionTypeColor().withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _currentQuestion.questionTypeLabel,
+                  style: TextStyle(
+                    color: _getQuestionTypeColor(),
+                    fontWeight: FontWeight.w500,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
 
@@ -287,19 +342,33 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
     );
   }
 
-  Widget _buildOptions() {
+  Color _getQuestionTypeColor() {
+    switch (_currentQuestion.questionType) {
+      case 'multiple_choice':
+        return Colors.blue;
+      case 'true_false':
+        return Colors.orange;
+      case 'essay':
+        return Colors.purple;
+      default:
+        return _typeColor;
+    }
+  }
+
+  Widget _buildAnswerSection() {
+    switch (_currentQuestion.questionType) {
+      case 'true_false':
+        return _buildTrueFalseOptions();
+      case 'essay':
+        return _buildEssayInput();
+      default:
+        return _buildMultipleChoiceOptions();
+    }
+  }
+
+  Widget _buildMultipleChoiceOptions() {
     final options = _currentQuestion.options ?? [];
     final selectedAnswer = _answers[_currentQuestion.id];
-
-    if (_currentQuestion.questionType == 'true_false') {
-      return Column(
-        children: [
-          _buildOptionItem('Benar', 'Benar', selectedAnswer == 'Benar'),
-          const SizedBox(height: 12),
-          _buildOptionItem('Salah', 'Salah', selectedAnswer == 'Salah'),
-        ],
-      );
-    }
 
     return Column(
       children: List.generate(options.length, (index) {
@@ -322,8 +391,164 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
     );
   }
 
-  Widget _buildOptionItem(String text, String answerValue, bool isSelected,
-      {String? label}) {
+  Widget _buildTrueFalseOptions() {
+    final selectedAnswer = _answers[_currentQuestion.id];
+
+    return Column(
+      children: [
+        _buildOptionItem(
+          'Benar',
+          'Benar',
+          selectedAnswer == 'Benar',
+          icon: Iconsax.tick_circle,
+          color: Colors.green,
+        ),
+        const SizedBox(height: 12),
+        _buildOptionItem(
+          'Salah',
+          'Salah',
+          selectedAnswer == 'Salah',
+          icon: Iconsax.close_circle,
+          color: Colors.red,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEssayInput() {
+    final controller = _essayControllers[_currentQuestion.id];
+    final currentAnswer = _answers[_currentQuestion.id] ?? '';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppTheme.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Iconsax.edit_2, color: Colors.purple, size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Jawaban Uraian',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.purple,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            maxLines: 8,
+            minLines: 5,
+            decoration: InputDecoration(
+              hintText: 'Tulis jawaban Anda di sini...',
+              hintStyle: const TextStyle(color: AppTheme.textLight),
+              filled: true,
+              fillColor: AppTheme.backgroundColor,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.purple, width: 2),
+              ),
+              contentPadding: const EdgeInsets.all(16),
+            ),
+            onChanged: (value) {
+              setState(() {
+                if (value.trim().isNotEmpty) {
+                  _answers[_currentQuestion.id] = value.trim();
+                } else {
+                  _answers.remove(_currentQuestion.id);
+                }
+              });
+            },
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${currentAnswer.split(' ').where((w) => w.isNotEmpty).length} kata',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textLight,
+                ),
+              ),
+              if (currentAnswer.isNotEmpty)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Iconsax.tick_circle, size: 14, color: Colors.purple),
+                      SizedBox(width: 4),
+                      Text(
+                        'Tersimpan',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.purple,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.withOpacity(0.2)),
+            ),
+            child: Row(
+              children: const [
+                Icon(Iconsax.info_circle, size: 18, color: Colors.blue),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Jawaban akan diperiksa berdasarkan kata kunci. Pastikan jawaban Anda jelas dan lengkap.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOptionItem(
+    String text,
+    String answerValue,
+    bool isSelected, {
+    String? label,
+    IconData? icon,
+    Color? color,
+  }) {
+    final effectiveColor = color ?? _typeColor;
+
     return InkWell(
       onTap: () => _selectAnswer(answerValue),
       borderRadius: BorderRadius.circular(12),
@@ -331,10 +556,10 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? _typeColor.withOpacity(0.1) : Colors.white,
+          color: isSelected ? effectiveColor.withOpacity(0.1) : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? _typeColor : Colors.grey.shade200,
+            color: isSelected ? effectiveColor : Colors.grey.shade200,
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -345,7 +570,7 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: isSelected ? _typeColor : Colors.grey.shade100,
+                  color: isSelected ? effectiveColor : Colors.grey.shade100,
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -359,19 +584,36 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
                 ),
               ),
               const SizedBox(width: 12),
+            ] else if (icon != null) ...[
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: isSelected ? effectiveColor : Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Icon(
+                    icon,
+                    size: 18,
+                    color: isSelected ? Colors.white : effectiveColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
             ],
             Expanded(
               child: Text(
                 text,
                 style: TextStyle(
                   fontSize: 15,
-                  color: isSelected ? _typeColor : AppTheme.textPrimary,
+                  color: isSelected ? effectiveColor : AppTheme.textPrimary,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
             ),
             if (isSelected)
-              Icon(Iconsax.tick_circle, color: _typeColor, size: 24),
+              Icon(Iconsax.tick_circle, color: effectiveColor, size: 24),
           ],
         ),
       ),
@@ -379,6 +621,8 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
   }
 
   Widget _buildBottomNav() {
+    _answers.containsKey(_currentQuestion.id);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -392,63 +636,125 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
         ],
       ),
       child: SafeArea(
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Previous button
-            if (_currentIndex > 0)
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _previousQuestion,
-                  icon: const Icon(Iconsax.arrow_left_2),
-                  label: const Text('Sebelumnya'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: BorderSide(color: _typeColor),
-                    foregroundColor: _typeColor,
+            // Question navigator dots
+            _buildQuestionNavigator(),
+            const SizedBox(height: 12),
+            // Navigation buttons
+            Row(
+              children: [
+                // Previous button
+                if (_currentIndex > 0)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _previousQuestion,
+                      icon: const Icon(Iconsax.arrow_left_2),
+                      label: const Text('Sebelumnya'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: _typeColor),
+                        foregroundColor: _typeColor,
+                      ),
+                    ),
+                  ),
+                if (_currentIndex > 0) const SizedBox(width: 12),
+
+                // Next/Submit button
+                Expanded(
+                  flex: _currentIndex > 0 ? 1 : 2,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSubmitting
+                        ? null
+                        : (_currentIndex == widget.questions.length - 1
+                            ? _submitQuiz
+                            : _nextQuestion),
+                    icon: _isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(
+                            _currentIndex == widget.questions.length - 1
+                                ? Iconsax.tick_square
+                                : Iconsax.arrow_right_3,
+                          ),
+                    label: Text(
+                      _isSubmitting
+                          ? 'Memproses...'
+                          : (_currentIndex == widget.questions.length - 1
+                              ? 'Selesai'
+                              : 'Selanjutnya'),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _typeColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ),
-              ),
-            if (_currentIndex > 0) const SizedBox(width: 12),
-
-            // Next/Submit button
-            Expanded(
-              flex: _currentIndex > 0 ? 1 : 2,
-              child: ElevatedButton.icon(
-                onPressed: _isSubmitting
-                    ? null
-                    : (_currentIndex == widget.questions.length - 1
-                        ? _submitQuiz
-                        : _nextQuestion),
-                icon: _isSubmitting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : Icon(
-                        _currentIndex == widget.questions.length - 1
-                            ? Iconsax.tick_square
-                            : Iconsax.arrow_right_3,
-                      ),
-                label: Text(
-                  _isSubmitting
-                      ? 'Memproses...'
-                      : (_currentIndex == widget.questions.length - 1
-                          ? 'Selesai'
-                          : 'Selanjutnya'),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _typeColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-              ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildQuestionNavigator() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: List.generate(widget.questions.length, (index) {
+          final question = widget.questions[index];
+          final isAnswered = _answers.containsKey(question.id);
+          final isCurrent = index == _currentIndex;
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            child: Container(
+              width: 32,
+              height: 32,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: isCurrent
+                    ? _typeColor
+                    : isAnswered
+                        ? _typeColor.withOpacity(0.2)
+                        : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: isCurrent
+                    ? null
+                    : Border.all(
+                        color: isAnswered ? _typeColor : Colors.grey.shade300,
+                      ),
+              ),
+              child: Center(
+                child: Text(
+                  '${index + 1}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isCurrent
+                        ? Colors.white
+                        : isAnswered
+                            ? _typeColor
+                            : AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
       ),
     );
   }
@@ -526,27 +832,42 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
     setState(() => _isSubmitting = true);
     _timer?.cancel();
 
+    final user = AuthService().currentUser;
+
     // Hitung skor
     int correctAnswers = 0;
     int totalPoints = 0;
     int earnedPoints = 0;
+    Map<String, int> timeSpentPerQuestion = {};
 
-    for (final question in widget.questions) {
+    for (int i = 0; i < widget.questions.length; i++) {
+      final question = widget.questions[i];
       totalPoints += question.points;
       final userAnswer = _answers[question.id];
-      if (userAnswer != null && question.isCorrectAnswer(userAnswer)) {
-        correctAnswers++;
-        earnedPoints += question.points;
+
+      // Approximate time spent per question
+      final avgTimePerQuestion = _timeSpent ~/ widget.questions.length;
+      timeSpentPerQuestion[question.id] = avgTimePerQuestion;
+
+      bool isCorrect = false;
+      if (userAnswer != null) {
+        isCorrect = question.isCorrectAnswer(userAnswer);
+        if (isCorrect) {
+          correctAnswers++;
+          earnedPoints += question.points;
+        }
       }
 
       // Save jawaban ke database
-      if (userAnswer != null) {
+      if (user != null && userAnswer != null) {
         try {
           await SupabaseService.saveUserAnswer(
             questionId: question.id,
             selectedAnswer: userAnswer,
-            isCorrect: question.isCorrectAnswer(userAnswer),
+            isCorrect: isCorrect,
             moduleId: question.moduleId,
+            attemptNumber: widget.attemptNumber,
+            timeSpentSeconds: avgTimePerQuestion,
           );
         } catch (e) {
           debugPrint('Error saving answer: $e');
@@ -573,6 +894,7 @@ class _QuizPlayScreenState extends State<QuizPlayScreen> {
         'timeSpent': _timeSpent,
         'answers': _answers,
         'questions': widget.questions,
+        'attemptNumber': widget.attemptNumber,
       },
     );
   }

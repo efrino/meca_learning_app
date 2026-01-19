@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart'; // untuk debugPrint
 import '../../config/constants.dart';
 import '../../shared/models/user_model.dart';
+import 'auth_service.dart';
 
 class SupabaseService {
   static SupabaseClient get client => Supabase.instance.client;
@@ -307,25 +308,25 @@ class SupabaseService {
   }
 
   /// Mengambil soal-soal berdasarkan quiz_id
-  static Future<List<Map<String, dynamic>>> getQuestionsByQuizId(
-      String quizId) async {
-    try {
-      final response = await client
-          .from('questions')
-          .select()
-          .eq('quiz_id', quizId)
-          .eq('is_active', true)
-          .order('order_index', ascending: true);
+  // static Future<List<Map<String, dynamic>>> getQuestionsByQuizId(
+  //     String quizId) async {
+  //   try {
+  //     final response = await client
+  //         .from('questions')
+  //         .select()
+  //         .eq('quiz_id', quizId)
+  //         .eq('is_active', true)
+  //         .order('order_index', ascending: true);
 
-      // Safely convert response to List<Map<String, dynamic>>
-      return response.map((item) {
-        return item;
-      }).toList();
-    } catch (e) {
-      debugPrint('Error getQuestionsByQuizId: $e');
-      rethrow;
-    }
-  }
+  //     // Safely convert response to List<Map<String, dynamic>>
+  //     return response.map((item) {
+  //       return item;
+  //     }).toList();
+  //   } catch (e) {
+  //     debugPrint('Error getQuestionsByQuizId: $e');
+  //     rethrow;
+  //   }
+  // }
 
   /// Membuat soal baru (simple)
   static Future<bool> createQuestion(Map<String, dynamic> data) async {
@@ -428,32 +429,32 @@ class SupabaseService {
   }
 
   /// Menyimpan jawaban user (untuk quiz system)
-  static Future<void> saveUserAnswer({
-    required String questionId,
-    required String selectedAnswer,
-    required bool isCorrect,
-    String? moduleId,
-    int attemptNumber = 1,
-    int? timeSpentSeconds,
-  }) async {
-    try {
-      final userId = currentUserId;
-      if (userId == null) throw Exception('User not logged in');
+  // static Future<void> saveUserAnswer({
+  //   required String questionId,
+  //   required String selectedAnswer,
+  //   required bool isCorrect,
+  //   String? moduleId,
+  //   int attemptNumber = 1,
+  //   int? timeSpentSeconds,
+  // }) async {
+  //   try {
+  //     final userId = currentUserId;
+  //     if (userId == null) throw Exception('User not logged in');
 
-      await client.from('user_answers').insert({
-        'user_id': userId,
-        'question_id': questionId,
-        'module_id': moduleId,
-        'attempt_number': attemptNumber,
-        'selected_answer': selectedAnswer,
-        'is_correct': isCorrect,
-        'time_spent_seconds': timeSpentSeconds,
-      });
-    } catch (e) {
-      debugPrint('Error saveUserAnswer: $e');
-      rethrow;
-    }
-  }
+  //     await client.from('user_answers').insert({
+  //       'user_id': userId,
+  //       'question_id': questionId,
+  //       'module_id': moduleId,
+  //       'attempt_number': attemptNumber,
+  //       'selected_answer': selectedAnswer,
+  //       'is_correct': isCorrect,
+  //       'time_spent_seconds': timeSpentSeconds,
+  //     });
+  //   } catch (e) {
+  //     debugPrint('Error saveUserAnswer: $e');
+  //     rethrow;
+  //   }
+  // }
 
   /// Mengambil riwayat quiz user
   static Future<List<Map<String, dynamic>>> getUserQuizHistory({
@@ -986,6 +987,214 @@ class SupabaseService {
     } catch (e) {
       debugPrint('Get analytics error: $e');
       return {};
+    }
+  }
+// ==================== QUIZ ATTEMPTS ====================
+
+  /// Get quiz attempts for a user
+  static Future<List<Map<String, dynamic>>> getQuizAttempts({
+    required String userId,
+    required String quizId,
+  }) async {
+    try {
+      final response = await client
+          .from('user_answers')
+          .select('attempt_number, is_correct, answered_at')
+          .eq('user_id', userId)
+          .inFilter(
+              'question_id',
+              (await client
+                      .from('questions')
+                      .select('id')
+                      .eq('quiz_id', quizId))
+                  .map((e) => e['id'])
+                  .toList())
+          .order('answered_at', ascending: false);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Get quiz attempts error: $e');
+      return [];
+    }
+  }
+
+  /// Get latest attempt number for a quiz
+  static Future<int> getLatestAttemptNumber({
+    required String userId,
+    required String quizId,
+  }) async {
+    try {
+      // Get questions for this quiz first
+      final questions = await client
+          .from('questions')
+          .select('id')
+          .eq('quiz_id', quizId)
+          .eq('is_active', true);
+
+      if (questions.isEmpty) return 0;
+
+      final questionIds = questions.map((e) => e['id'] as String).toList();
+
+      final response = await client
+          .from('user_answers')
+          .select('attempt_number')
+          .eq('user_id', userId)
+          .inFilter('question_id', questionIds)
+          .order('attempt_number', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      return response?['attempt_number'] as int? ?? 0;
+    } catch (e) {
+      print('Get latest attempt number error: $e');
+      return 0;
+    }
+  }
+
+  /// Get quiz attempt summary (scores by attempt)
+  static Future<List<Map<String, dynamic>>> getQuizAttemptSummary({
+    required String userId,
+    required String quizId,
+  }) async {
+    try {
+      // Get questions for this quiz
+      final questions = await client
+          .from('questions')
+          .select('id, points')
+          .eq('quiz_id', quizId)
+          .eq('is_active', true);
+
+      if (questions.isEmpty) return [];
+
+      final questionIds = questions.map((e) => e['id'] as String).toList();
+      final totalPoints =
+          questions.fold<int>(0, (sum, q) => sum + (q['points'] as int? ?? 10));
+
+      // Get all answers for these questions
+      final answers = await client
+          .from('user_answers')
+          .select(
+              'attempt_number, question_id, is_correct, answered_at, time_spent_seconds')
+          .eq('user_id', userId)
+          .inFilter('question_id', questionIds)
+          .order('attempt_number')
+          .order('answered_at');
+
+      if (answers.isEmpty) return [];
+
+      // Group by attempt number
+      final Map<int, List<Map<String, dynamic>>> attemptGroups = {};
+      for (final answer in answers) {
+        final attemptNum = answer['attempt_number'] as int? ?? 1;
+        attemptGroups
+            .putIfAbsent(attemptNum, () => [])
+            .add(Map<String, dynamic>.from(answer));
+      }
+
+      // Calculate summary for each attempt
+      final List<Map<String, dynamic>> summaries = [];
+      for (final entry in attemptGroups.entries) {
+        final attemptAnswers = entry.value;
+        final correctCount =
+            attemptAnswers.where((a) => a['is_correct'] == true).length;
+        final totalAnswered = attemptAnswers.length;
+        final totalTime = attemptAnswers.fold<int>(
+            0, (sum, a) => sum + (a['time_spent_seconds'] as int? ?? 0));
+
+        // Calculate earned points
+        int earnedPoints = 0;
+        for (final answer in attemptAnswers) {
+          if (answer['is_correct'] == true) {
+            final question = questions.firstWhere(
+              (q) => q['id'] == answer['question_id'],
+              orElse: () => {'points': 10},
+            );
+            earnedPoints += (question['points'] as int? ?? 10);
+          }
+        }
+
+        final score =
+            totalPoints > 0 ? ((earnedPoints / totalPoints) * 100).round() : 0;
+
+        // Get the latest answered_at for this attempt
+        DateTime? attemptDate;
+        for (final answer in attemptAnswers) {
+          final answeredAt =
+              DateTime.tryParse(answer['answered_at'] as String? ?? '');
+          if (answeredAt != null &&
+              (attemptDate == null || answeredAt.isAfter(attemptDate))) {
+            attemptDate = answeredAt;
+          }
+        }
+
+        summaries.add({
+          'attempt_number': entry.key,
+          'correct_count': correctCount,
+          'total_answered': totalAnswered,
+          'total_questions': questions.length,
+          'earned_points': earnedPoints,
+          'total_points': totalPoints,
+          'score': score,
+          'time_spent_seconds': totalTime,
+          'completed_at': attemptDate?.toIso8601String(),
+        });
+      }
+
+      // Sort by attempt number descending (newest first)
+      summaries.sort((a, b) =>
+          (b['attempt_number'] as int).compareTo(a['attempt_number'] as int));
+
+      return summaries;
+    } catch (e) {
+      print('Get quiz attempt summary error: $e');
+      return [];
+    }
+  }
+
+  /// Save user answer with quiz_id support
+  static Future<bool> saveUserAnswer({
+    required String questionId,
+    required String selectedAnswer,
+    required bool isCorrect,
+    String? moduleId,
+    String? quizId,
+    int? attemptNumber,
+    int? timeSpentSeconds,
+  }) async {
+    try {
+      final user = AuthService().currentUser;
+      if (user == null) return false;
+
+      await client.from('user_answers').insert({
+        'user_id': user.id,
+        'question_id': questionId,
+        'module_id': moduleId,
+        'attempt_number': attemptNumber ?? 1,
+        'selected_answer': selectedAnswer,
+        'is_correct': isCorrect,
+        'time_spent_seconds': timeSpentSeconds,
+      });
+      return true;
+    } catch (e) {
+      print('Save user answer error: $e');
+      return false;
+    }
+  }
+
+  /// Get questions by quiz ID
+  static Future<List<Map<String, dynamic>>> getQuestionsByQuizId(
+    String quizId,
+  ) async {
+    try {
+      final response = await client
+          .from('questions')
+          .select()
+          .eq('quiz_id', quizId)
+          .eq('is_active', true)
+          .order('order_index');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Get questions by quiz ID error: $e');
+      return [];
     }
   }
 }

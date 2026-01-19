@@ -87,6 +87,7 @@ class QuizModel {
 
 /// ============================================================
 /// MODEL: QUESTION
+/// Supports multiple_choice, true_false, and essay types
 /// ============================================================
 class QuestionModel {
   final String id;
@@ -132,7 +133,7 @@ class QuestionModel {
       case 'true_false':
         return 'Benar/Salah';
       case 'essay':
-        return 'Essay';
+        return 'Uraian';
       default:
         return questionType;
     }
@@ -306,7 +307,36 @@ class QuestionModel {
   }
 
   /// Check if answer is correct
+  /// For essay type, this does a case-insensitive comparison
+  /// and checks if answer contains key phrases
   bool isCorrectAnswer(String answer) {
+    if (isEssay) {
+      // For essay, check if key phrases from correct answer are present
+      final correctLower = correctAnswer.toLowerCase().trim();
+      final answerLower = answer.toLowerCase().trim();
+
+      // Simple keyword matching for essay
+      final keywords = correctLower
+          .split(RegExp(r'[\s,;.]+'))
+          .where((w) => w.length > 3)
+          .toList();
+
+      if (keywords.isEmpty) {
+        return answerLower.contains(correctLower) ||
+            correctLower.contains(answerLower);
+      }
+
+      // Check if at least 50% of keywords are present
+      int matchCount = 0;
+      for (final keyword in keywords) {
+        if (answerLower.contains(keyword)) {
+          matchCount++;
+        }
+      }
+
+      return matchCount >= (keywords.length * 0.5).ceil();
+    }
+
     return answer.toLowerCase().trim() == correctAnswer.toLowerCase().trim();
   }
 
@@ -328,7 +358,7 @@ class UserAnswerModel {
   final String id;
   final String userId;
   final String questionId;
-  final String moduleId;
+  final String? moduleId;
   final int attemptNumber;
   final String selectedAnswer;
   final bool isCorrect;
@@ -339,7 +369,7 @@ class UserAnswerModel {
     required this.id,
     required this.userId,
     required this.questionId,
-    required this.moduleId,
+    this.moduleId,
     this.attemptNumber = 1,
     required this.selectedAnswer,
     required this.isCorrect,
@@ -352,7 +382,7 @@ class UserAnswerModel {
       id: json['id'] as String,
       userId: json['user_id'] as String,
       questionId: json['question_id'] as String,
-      moduleId: json['module_id'] as String,
+      moduleId: json['module_id'] as String?,
       attemptNumber: json['attempt_number'] as int? ?? 1,
       selectedAnswer: json['selected_answer'] as String,
       isCorrect: json['is_correct'] as bool,
@@ -385,5 +415,74 @@ class UserAnswerModel {
       'is_correct': isCorrect,
       'time_spent_seconds': timeSpentSeconds,
     };
+  }
+}
+
+/// ============================================================
+/// MODEL: QUIZ ATTEMPT SUMMARY
+/// For displaying attempt history
+/// ============================================================
+class QuizAttemptSummary {
+  final int attemptNumber;
+  final int correctCount;
+  final int totalAnswered;
+  final int totalQuestions;
+  final int earnedPoints;
+  final int totalPoints;
+  final int score;
+  final int timeSpentSeconds;
+  final DateTime? completedAt;
+
+  QuizAttemptSummary({
+    required this.attemptNumber,
+    required this.correctCount,
+    required this.totalAnswered,
+    required this.totalQuestions,
+    required this.earnedPoints,
+    required this.totalPoints,
+    required this.score,
+    required this.timeSpentSeconds,
+    this.completedAt,
+  });
+
+  factory QuizAttemptSummary.fromJson(Map<String, dynamic> json) {
+    return QuizAttemptSummary(
+      attemptNumber: json['attempt_number'] as int? ?? 1,
+      correctCount: json['correct_count'] as int? ?? 0,
+      totalAnswered: json['total_answered'] as int? ?? 0,
+      totalQuestions: json['total_questions'] as int? ?? 0,
+      earnedPoints: json['earned_points'] as int? ?? 0,
+      totalPoints: json['total_points'] as int? ?? 0,
+      score: json['score'] as int? ?? 0,
+      timeSpentSeconds: json['time_spent_seconds'] as int? ?? 0,
+      completedAt: json['completed_at'] != null
+          ? DateTime.tryParse(json['completed_at'] as String)
+          : null,
+    );
+  }
+
+  bool get isPassed => score >= 70;
+
+  String get formattedTime {
+    if (timeSpentSeconds < 60) return '${timeSpentSeconds}s';
+    final minutes = timeSpentSeconds ~/ 60;
+    final secs = timeSpentSeconds % 60;
+    return '${minutes}m ${secs}s';
+  }
+
+  String get formattedDate {
+    if (completedAt == null) return '-';
+    final now = DateTime.now();
+    final diff = now.difference(completedAt!);
+
+    if (diff.inDays == 0) {
+      return 'Hari ini';
+    } else if (diff.inDays == 1) {
+      return 'Kemarin';
+    } else if (diff.inDays < 7) {
+      return '${diff.inDays} hari lalu';
+    } else {
+      return '${completedAt!.day}/${completedAt!.month}/${completedAt!.year}';
+    }
   }
 }

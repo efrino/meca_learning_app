@@ -96,10 +96,14 @@ class AppRoutes {
 
       case quizPlay:
         final args = settings.arguments as Map<String, dynamic>;
+        final quiz = args['quiz'] as QuizModel;
+        final questions = args['questions'] as List<QuestionModel>;
+        final attemptNumber = args['attemptNumber'] as int? ?? 1;
         return _buildRoute(
           QuizPlayScreen(
-            quiz: args['quiz'] as QuizModel,
-            questions: args['questions'] as List<QuestionModel>,
+            quiz: quiz,
+            questions: questions,
+            attemptNumber: attemptNumber,
           ),
           settings,
         );
@@ -115,6 +119,7 @@ class AppRoutes {
             timeSpent: args['timeSpent'] as int,
             answers: args['answers'] as Map<String, String>?,
             questions: args['questions'] as List<QuestionModel>?,
+            attemptNumber: args['attemptNumber'] as int? ?? 1,
           ),
           settings,
         );
