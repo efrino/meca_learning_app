@@ -20,15 +20,34 @@ workflows:
           cd ios
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 15.0/g' Runner.xcodeproj/project.pbxproj
       
+      - name: Disable code signing in Xcode project
+        script: |
+          cd ios
+          sed -i '' 's/CODE_SIGN_IDENTITY = ".*"/CODE_SIGN_IDENTITY = ""/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/DEVELOPMENT_TEAM = [^;]*/DEVELOPMENT_TEAM = ""/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = ".*"/"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = ""/g' Runner.xcodeproj/project.pbxproj
+      
       - name: Pod install
         script: |
           cd ios
           rm -rf Pods Podfile.lock
           pod install --repo-update
       
-      - name: Build iOS (no codesign)
-        script: flutter build ios --release --no-codesign
+      - name: Build iOS with xcodebuild
+        script: |
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            -allowProvisioningUpdates \
+            clean build
     
     artifacts:
+      - ios/build/Release-iphoneos/*.app
       - build/ios/iphoneos/*.app
-      - flutter_drive.log
