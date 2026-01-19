@@ -20,13 +20,55 @@ class AnimationsScreen extends StatefulWidget {
 
 class _AnimationsScreenState extends State<AnimationsScreen> {
   List<ModuleModel> _animations = [];
+  List<ModuleModel> _filteredAnimations = [];
   bool _isLoading = true;
   String? _error;
+
+  // Search
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  // Video cache status tracking
+  Map<String, bool> _videoCacheStatus = {};
 
   @override
   void initState() {
     super.initState();
     _loadAnimations();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    setState(() {
+      _searchQuery = query;
+      _applySearch();
+    });
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      _filteredAnimations = List.from(_animations);
+    });
+  }
+
+  void _applySearch() {
+    if (_searchQuery.isEmpty) {
+      _filteredAnimations = List.from(_animations);
+    } else {
+      final query = _searchQuery.toLowerCase().trim();
+      _filteredAnimations = _animations.where((animation) {
+        final title = animation.title.toLowerCase();
+        final description = (animation.description ?? '').toLowerCase();
+        return title.contains(query) || description.contains(query);
+      }).toList();
+    }
   }
 
   Future<void> _loadAnimations() async {
@@ -38,8 +80,12 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
       final data = await SupabaseService.getModules(category: 'animation');
       setState(() {
         _animations = data.map((e) => ModuleModel.fromJson(e)).toList();
+        _applySearch();
         _isLoading = false;
       });
+
+      // Check video cache status after loading animations
+      _checkVideoCacheStatus();
     } catch (e) {
       setState(() {
         _error = 'Gagal memuat animasi: $e';
@@ -48,22 +94,55 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
     }
   }
 
+  /// Check cache status for all videos (non-blocking)
+  Future<void> _checkVideoCacheStatus() async {
+    final Map<String, bool> newStatus = {};
+
+    for (final animation in _animations) {
+      final isCached = await VideoCacheService.isVideoCached(animation.id);
+      newStatus[animation.id] = isCached;
+    }
+
+    if (mounted) {
+      setState(() {
+        _videoCacheStatus = newStatus;
+      });
+    }
+  }
+
+  /// Get count of cached videos
+  int get _cachedVideoCount {
+    return _videoCacheStatus.values.where((cached) => cached).length;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: widget.embedded
-          ? null
-          : AppBar(title: const Text('Animasi Pembelajaran')),
+      appBar: widget.embedded ? null : _buildAppBar(),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (widget.embedded) _buildHeader(),
+            _buildSearchBar(),
             Expanded(child: _buildContent()),
           ],
         ),
       ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
+      title: const Text('Animasi Pembelajaran'),
+      actions: [
+        IconButton(
+          icon: const Icon(Iconsax.refresh),
+          onPressed: _loadAnimations,
+          tooltip: 'Refresh',
+        ),
+      ],
     );
   }
 
@@ -87,15 +166,90 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
               children: [
                 Text('Animasi Pembelajaran',
                     style: Theme.of(context).textTheme.titleLarge),
-                Text('${_animations.length} video tersedia',
-                    style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 13)),
+                // Updated subtitle with cache info and search result
+                Row(
+                  children: [
+                    Text(
+                      _searchQuery.isEmpty
+                          ? '${_animations.length} video'
+                          : '${_filteredAnimations.length} dari ${_animations.length} video',
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 13),
+                    ),
+                    if (_cachedVideoCount > 0 && _searchQuery.isEmpty) ...[
+                      const Text(
+                        ' • ',
+                        style: TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 13),
+                      ),
+                      Icon(
+                        Icons.offline_pin,
+                        size: 14,
+                        color: Colors.green.shade600,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$_cachedVideoCount tersimpan',
+                        style: TextStyle(
+                          color: Colors.green.shade600,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
           IconButton(
               icon: const Icon(Iconsax.refresh), onPressed: _loadAnimations),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: TextField(
+          controller: _searchController,
+          onChanged: _onSearchChanged,
+          decoration: InputDecoration(
+            hintText: 'Cari animasi...',
+            hintStyle: const TextStyle(
+              color: AppTheme.textLight,
+              fontSize: 14,
+            ),
+            prefixIcon: const Icon(Iconsax.search_normal,
+                size: 20, color: AppTheme.textLight),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Iconsax.close_circle,
+                        size: 20, color: AppTheme.textLight),
+                    onPressed: _clearSearch,
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -111,16 +265,30 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
           title: 'Belum Ada Animasi',
           subtitle: 'Video animasi akan muncul di sini');
     }
+    if (_filteredAnimations.isEmpty) {
+      return EmptyStateWidget(
+        icon: Iconsax.search_status,
+        title: 'Tidak Ditemukan',
+        subtitle: 'Tidak ada animasi yang cocok dengan "$_searchQuery"',
+        buttonText: 'Reset Pencarian',
+        onButtonPressed: _clearSearch,
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: _loadAnimations,
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: _animations.length,
+        itemCount: _filteredAnimations.length,
         itemBuilder: (context, index) {
-          final animation = _animations[index];
+          final animation = _filteredAnimations[index];
+          final isCached = _videoCacheStatus[animation.id] ?? false;
+
           return _AnimationCard(
-              animation: animation, onTap: () => _openAnimation(animation));
+            animation: animation,
+            isCached: isCached,
+            onTap: () => _openAnimation(animation),
+          );
         },
       ),
     );
@@ -130,15 +298,28 @@ class _AnimationsScreenState extends State<AnimationsScreen> {
     ActivityLogService().logButtonClick(
         buttonId: 'open_animation_${animation.id}',
         screenName: 'animations_screen');
-    Navigator.pushNamed(context, AppRoutes.animationPlayer,
-        arguments: animation);
+
+    Navigator.pushNamed(
+      context,
+      AppRoutes.animationPlayer,
+      arguments: animation,
+    ).then((_) {
+      // Refresh cache status when returning from player
+      _checkVideoCacheStatus();
+    });
   }
 }
 
 class _AnimationCard extends StatelessWidget {
   final ModuleModel animation;
+  final bool isCached;
   final VoidCallback onTap;
-  const _AnimationCard({required this.animation, required this.onTap});
+
+  const _AnimationCard({
+    required this.animation,
+    required this.isCached,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -156,8 +337,11 @@ class _AnimationCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Thumbnail with play button overlay
-              _CachedThumbnailWidget(animation: animation),
+              // Thumbnail with play button overlay and cache badge
+              _CachedThumbnailWidget(
+                animation: animation,
+                isCached: isCached,
+              ),
 
               // Content
               Padding(
@@ -196,6 +380,34 @@ class _AnimationCard extends StatelessWidget {
                               style: const TextStyle(
                                   fontSize: 12, color: AppTheme.textLight))
                         ],
+                        const Spacer(),
+                        // Offline badge in card info
+                        if (isCached)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.offline_pin,
+                                    size: 12, color: Colors.green.shade600),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Offline',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ],
@@ -212,7 +424,12 @@ class _AnimationCard extends StatelessWidget {
 /// Widget untuk menampilkan thumbnail dengan caching ke internal storage
 class _CachedThumbnailWidget extends StatefulWidget {
   final ModuleModel animation;
-  const _CachedThumbnailWidget({required this.animation});
+  final bool isCached;
+
+  const _CachedThumbnailWidget({
+    required this.animation,
+    required this.isCached,
+  });
 
   @override
   State<_CachedThumbnailWidget> createState() => _CachedThumbnailWidgetState();
@@ -221,7 +438,6 @@ class _CachedThumbnailWidget extends StatefulWidget {
 class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
   File? _cachedFile;
   bool _isLoading = true;
-  bool _hasError = false;
 
   @override
   void initState() {
@@ -250,7 +466,6 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
 
       // Check if cached file exists
       if (await cachedFile.exists()) {
-        debugPrint('📁 Thumbnail loaded from cache: ${widget.animation.title}');
         if (mounted) {
           setState(() {
             _cachedFile = cachedFile;
@@ -264,17 +479,11 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
       final thumbnailUrl = widget.animation.getThumbnailUrl(size: 400);
 
       if (thumbnailUrl.isEmpty) {
-        debugPrint('⚠️ No thumbnail URL for: ${widget.animation.title}');
         if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _hasError = true;
-          });
+          setState(() => _isLoading = false);
         }
         return;
       }
-
-      debugPrint('⬇️ Downloading thumbnail: $thumbnailUrl');
 
       // Download thumbnail
       final response = await http.get(Uri.parse(thumbnailUrl));
@@ -285,8 +494,6 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
         if (contentType.contains('image') || response.bodyBytes.length > 1000) {
           // Save to cache
           await cachedFile.writeAsBytes(response.bodyBytes);
-
-          debugPrint('✅ Thumbnail cached: ${widget.animation.title}');
 
           if (mounted) {
             setState(() {
@@ -301,12 +508,9 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
         throw Exception('HTTP ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('❌ Thumbnail error for ${widget.animation.title}: $e');
+      debugPrint('Thumbnail error: $e');
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-        });
+        setState(() => _isLoading = false);
       }
     }
   }
@@ -330,29 +534,36 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
             // Duration badge (jika ada)
             if (widget.animation.durationMinutes != null) _buildDurationBadge(),
 
-            // Cache indicator (optional, untuk debug)
-            if (_cachedFile != null && !_isLoading)
+            // Video cache indicator (top-left) - shows if video is cached
+            if (widget.isCached)
               Positioned(
                 left: 8,
                 top: 8,
                 child: Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(4),
+                    color: Colors.green.shade600,
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.offline_pin, size: 10, color: Colors.white),
-                      SizedBox(width: 2),
+                      Icon(Icons.offline_pin, size: 12, color: Colors.white),
+                      SizedBox(width: 4),
                       Text(
-                        'Cached',
+                        'Tersimpan',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -368,72 +579,58 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
   Widget _buildThumbnailImage() {
     // Loading state
     if (_isLoading) {
-      return _buildLoadingPlaceholder();
-    }
-
-    // Error or no URL - show default
-    if (_hasError || _cachedFile == null) {
-      return _buildDefaultThumbnail();
+      return Container(
+        color: AppTheme.animationColor.withOpacity(0.1),
+        child: const Center(
+          child: SizedBox(
+            width: 30,
+            height: 30,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor:
+                  AlwaysStoppedAnimation<Color>(AppTheme.animationColor),
+            ),
+          ),
+        ),
+      );
     }
 
     // Load from cached file
-    return Image.file(
-      _cachedFile!,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        debugPrint('❌ Error loading cached file: $error');
-        return _buildDefaultThumbnail();
-      },
-    );
-  }
+    if (_cachedFile != null) {
+      return Image.file(
+        _cachedFile!,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _buildDefaultThumbnail(),
+      );
+    }
 
-  Widget _buildLoadingPlaceholder() {
-    return Container(
-      color: AppTheme.animationColor.withOpacity(0.1),
-      child: const Center(
-        child: SizedBox(
-          width: 30,
-          height: 30,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.animationColor),
-          ),
-        ),
-      ),
-    );
+    // Error or no URL - show default
+    return _buildDefaultThumbnail();
   }
 
   Widget _buildDefaultThumbnail() {
-    // Coba load dari asset, jika gagal tampilkan placeholder sederhana
-    return Image.asset(
-      'assets/images/thumbnail_default.jpg',
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        // Jika asset juga tidak ada, tampilkan placeholder warna
-        return Container(
-          color: AppTheme.animationColor.withOpacity(0.15),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Iconsax.video,
-                  size: 48,
-                  color: AppTheme.animationColor.withOpacity(0.5),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Video',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.animationColor.withOpacity(0.7),
-                  ),
-                ),
-              ],
+    return Container(
+      color: AppTheme.animationColor.withOpacity(0.15),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Iconsax.video,
+              size: 48,
+              color: AppTheme.animationColor.withOpacity(0.5),
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 8),
+            Text(
+              'Video',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.animationColor.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -474,6 +671,115 @@ class _CachedThumbnailWidgetState extends State<_CachedThumbnailWidget> {
         ),
       ),
     );
+  }
+}
+
+/// Service untuk mengelola cache video
+class VideoCacheService {
+  /// Check if video is cached
+  static Future<bool> isVideoCached(String moduleId) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final videoFile =
+          File('${appDir.path}/video_cache/animation_$moduleId.mp4');
+
+      if (await videoFile.exists()) {
+        // Validate file size (minimum 100KB)
+        final fileSize = await videoFile.length();
+        return fileSize > 100 * 1024;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error checking video cache: $e');
+      return false;
+    }
+  }
+
+  /// Get cached video count
+  static Future<int> getCachedVideoCount() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final cacheDir = Directory('${appDir.path}/video_cache');
+
+      if (await cacheDir.exists()) {
+        int count = 0;
+        await for (final entity in cacheDir.list()) {
+          if (entity is File && entity.path.endsWith('.mp4')) {
+            final fileSize = await entity.length();
+            if (fileSize > 100 * 1024) {
+              count++;
+            }
+          }
+        }
+        return count;
+      }
+      return 0;
+    } catch (e) {
+      debugPrint('Error counting cached videos: $e');
+      return 0;
+    }
+  }
+
+  /// Clear all cached videos
+  static Future<void> clearCache() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final cacheDir = Directory('${appDir.path}/video_cache');
+      if (await cacheDir.exists()) {
+        await cacheDir.delete(recursive: true);
+        debugPrint('🗑️ Video cache cleared');
+      }
+    } catch (e) {
+      debugPrint('Error clearing video cache: $e');
+    }
+  }
+
+  /// Get total cache size
+  static Future<int> getCacheSize() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final cacheDir = Directory('${appDir.path}/video_cache');
+
+      if (await cacheDir.exists()) {
+        int totalSize = 0;
+        await for (final entity in cacheDir.list(recursive: true)) {
+          if (entity is File) {
+            totalSize += await entity.length();
+          }
+        }
+        return totalSize;
+      }
+      return 0;
+    } catch (e) {
+      debugPrint('Error getting cache size: $e');
+      return 0;
+    }
+  }
+
+  /// Get formatted cache size
+  static Future<String> getFormattedCacheSize() async {
+    final size = await getCacheSize();
+    if (size < 1024) return '$size B';
+    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
+    if (size < 1024 * 1024 * 1024) {
+      return '${(size / 1024 / 1024).toStringAsFixed(2)} MB';
+    }
+    return '${(size / 1024 / 1024 / 1024).toStringAsFixed(2)} GB';
+  }
+
+  /// Delete specific video
+  static Future<void> deleteVideo(String moduleId) async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final videoFile =
+          File('${appDir.path}/video_cache/animation_$moduleId.mp4');
+      if (await videoFile.exists()) {
+        await videoFile.delete();
+        debugPrint('🗑️ Video deleted: animation_$moduleId.mp4');
+      }
+    } catch (e) {
+      debugPrint('Error deleting video: $e');
+    }
   }
 }
 

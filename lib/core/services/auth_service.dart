@@ -35,6 +35,10 @@ class AuthService {
         final freshUser = await SupabaseService.getUserById(_currentUser!.id);
         if (freshUser != null && freshUser.isActive) {
           _currentUser = freshUser;
+
+          // Set current user ID untuk quiz system
+          SupabaseService.setCurrentUserId(freshUser.id);
+
           return true;
         } else {
           // User not found or inactive, clear session
@@ -74,6 +78,9 @@ class AuthService {
       _sessionToken = DateTime.now().millisecondsSinceEpoch.toString();
       _currentUser = user;
 
+      // Set current user ID untuk quiz system
+      SupabaseService.setCurrentUserId(user.id);
+
       // Save to secure storage
       await _secureStorage.write(
         key: AppConstants.userKey,
@@ -104,6 +111,9 @@ class AuthService {
     _currentUser = null;
     _sessionToken = null;
 
+    // Clear current user ID dari SupabaseService
+    SupabaseService.setCurrentUserId(null);
+
     await _secureStorage.delete(key: AppConstants.userKey);
     await _secureStorage.delete(key: AppConstants.tokenKey);
   }
@@ -115,6 +125,10 @@ class AuthService {
     final freshUser = await SupabaseService.getUserById(_currentUser!.id);
     if (freshUser != null) {
       _currentUser = freshUser;
+
+      // Update current user ID jika berubah (seharusnya tidak, tapi untuk safety)
+      SupabaseService.setCurrentUserId(freshUser.id);
+
       await _secureStorage.write(
         key: AppConstants.userKey,
         value: jsonEncode(freshUser.toJson()),

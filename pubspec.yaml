@@ -35,6 +35,9 @@ dependencies:
   # PDF Viewer
   syncfusion_flutter_pdfviewer: ^32.1.19
   flutter_cache_manager: ^3.4.1
+
+  # Excel Viewer (NEW)
+  excel: ^4.0.3
   
   # Video Player
   video_player: ^2.10.1

@@ -8,12 +8,17 @@ import '../features/animations/presentation/animation_player_screen.dart';
 import '../features/meca_aid/presentation/meca_aid_screen.dart';
 import '../features/meca_aid/presentation/meca_aid_detail_screen.dart';
 import '../features/meca_aid/presentation/quiz_screen.dart';
+import '../features/meca_aid/presentation/quiz_detail_screen.dart';
+import '../features/meca_aid/presentation/quiz_play_screen.dart';
+import '../features/meca_aid/presentation/quiz_result_screen.dart';
+import '../features/meca_aid/presentation/excel_viewer_screen.dart';
 import '../features/error_codes/presentation/error_codes_screen.dart';
 import '../features/error_codes/presentation/error_code_detail_screen.dart';
 import '../features/activity_log/presentation/activity_log_screen.dart';
 import '../features/admin/presentation/admin_dashboard_screen.dart';
 import '../shared/models/module_model.dart';
 import '../shared/models/error_code_model.dart';
+import '../shared/models/quiz_model.dart';
 
 class AppRoutes {
   static const String login = '/login';
@@ -29,6 +34,12 @@ class AppRoutes {
   static const String errorCodeDetail = '/error-codes/detail';
   static const String activityLog = '/activity-log';
   static const String adminDashboard = '/admin';
+
+  // ==================== NEW ROUTES ====================
+  static const String quizDetail = '/quiz-detail';
+  static const String quizPlay = '/quiz-play';
+  static const String quizResult = '/quiz-result';
+  static const String excelViewer = '/excel-viewer';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -76,6 +87,46 @@ class AppRoutes {
 
       case adminDashboard:
         return _buildRoute(const AdminDashboardScreen(), settings);
+
+      // ==================== NEW ROUTES HANDLERS ====================
+
+      case quizDetail:
+        final quiz = settings.arguments as QuizModel;
+        return _buildRoute(QuizDetailScreen(quiz: quiz), settings);
+
+      case quizPlay:
+        final args = settings.arguments as Map<String, dynamic>;
+        final quiz = args['quiz'] as QuizModel;
+        final questions = args['questions'] as List<QuestionModel>;
+        final attemptNumber = args['attemptNumber'] as int? ?? 1;
+        return _buildRoute(
+          QuizPlayScreen(
+            quiz: quiz,
+            questions: questions,
+            attemptNumber: attemptNumber,
+          ),
+          settings,
+        );
+
+      case quizResult:
+        final args = settings.arguments as Map<String, dynamic>;
+        return _buildRoute(
+          QuizResultScreen(
+            quiz: args['quiz'] as QuizModel,
+            score: args['score'] as int,
+            totalQuestions: args['totalQuestions'] as int,
+            correctAnswers: args['correctAnswers'] as int,
+            timeSpent: args['timeSpent'] as int,
+            answers: args['answers'] as Map<String, String>?,
+            questions: args['questions'] as List<QuestionModel>?,
+            attemptNumber: args['attemptNumber'] as int? ?? 1,
+          ),
+          settings,
+        );
+
+      case excelViewer:
+        final module = settings.arguments as ModuleModel;
+        return _buildRoute(ExcelViewerScreen(module: module), settings);
 
       default:
         return _buildRoute(const LoginScreen(), settings);
